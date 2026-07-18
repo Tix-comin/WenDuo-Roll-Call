@@ -3,11 +3,10 @@ import os
 import sys
 import json
 import time
-import shutil
-import threading
 import tempfile
 import subprocess
 from typing import Optional, Tuple
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from PyQt6.QtCore import QThread, pyqtSignal, QObject, QTimer
 
@@ -18,7 +17,7 @@ try:
 except ImportError:
     urllib = None
 
-CURRENT_VERSION = "v3.0.0"
+CURRENT_VERSION = "v3.0.1"
 
 GITHUB_OWNER = "Tix-comin"
 GITHUB_REPO = "WenDuo-Roll-Call"
@@ -31,14 +30,15 @@ GITEE_REPO = "WenDuo-Roll-Call"
 # 安装包命名规则：WenDuo-Roll-Call-Setup-{tag}.exe
 INSTALLER_NAME_TEMPLATE = "WenDuo-Roll-Call-Setup-{tag}.exe"
 
-# 检查更新优先使用 GitHub releases/latest 重定向（无 API 速率限制），
-# 失败时回退到 API + 镜像。
+# 检查更新并发请求多个节点，优先使用返回 JSON 的 API 端点（通常最快）。
+# 第 1 批：API 直连 + 两个 API 镜像；第 2 批：releases/latest 重定向 + 镜像。
 CHECK_URLS = [
+    f"https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/releases/latest",
+    f"https://ghproxy.com/https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/releases/latest",
+    f"https://gh-proxy.com/https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/releases/latest",
     f"https://github.com/{GITHUB_OWNER}/{GITHUB_REPO}/releases/latest",
     f"https://ghproxy.com/https://github.com/{GITHUB_OWNER}/{GITHUB_REPO}/releases/latest",
     f"https://gh-proxy.com/https://github.com/{GITHUB_OWNER}/{GITHUB_REPO}/releases/latest",
-    f"https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/releases/latest",
-    f"https://ghproxy.com/https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/releases/latest",
 ]
 
 # 下载源模板：生成多个候选 URL，程序会依次尝试，优先使用靠前的源。
@@ -88,32 +88,44 @@ class CheckUpdateThread(QThread):
             self.finished.emit(None, str(e))
 
     def _check_update(self) -> Optional[UpdateInfo]:
-        last_error = None
-        tag_name = None
-        release_body = ""
-        download_url_base = f"https://github.com/{GITHUB_OWNER}/{GITHUB_REPO}"
+        """并发检查更新，多个 URL 同时请求，取最快返回的有效结果。"""
+        # 优先并发请求 API 节点（通常最快），失败再请求重定向节点
+        primary_urls = CHECK_URLS[:3]
+        fallback_urls = CHECK_URLS[3:]
 
-        for check_url in CHECK_URLS:
+        result = self._try_check_urls(primary_urls)
+        if result is not None:
+            return result
+
+        result = self._try_check_urls(fallback_urls)
+        if result is not None:
+            return result
+
+        raise Exception("检查更新失败: 所有节点均无响应或无法解析版本")
+
+    def _try_check_urls(self, urls: list) -> Optional[UpdateInfo]:
+        """并发请求一组 URL，返回第一个可用的 UpdateInfo；全部失败返回 None。"""
+        errors = {}
+
+        def fetch(url: str):
             try:
                 req = urllib.request.Request(
-                    check_url,
+                    url,
                     headers={
                         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
                         "Accept": "application/json",
-                    }
+                    },
                 )
-                with urllib.request.urlopen(req, timeout=15) as resp:
+                with urllib.request.urlopen(req, timeout=8) as resp:
                     final_url = resp.geturl()
-                    # 优先从重定向后的 URL 解析 tag，例如 .../releases/tag/v1.0.0
                     tag_name = self._extract_tag_from_url(final_url)
+                    release_body = ""
 
-                    if "api.github.com" in check_url:
-                        # API 模式：从 JSON 读取 tag_name + release notes
+                    if "api.github.com" in url:
                         data = json.loads(resp.read().decode("utf-8"))
                         tag_name = data.get("tag_name", tag_name or "")
                         release_body = data.get("body", "") or ""
                     elif not tag_name:
-                        # 非API URL 但未能从URL解析tag，尝试读取内容（可能是JSON）
                         try:
                             ct = resp.headers.get("Content-Type", "")
                             if "json" in ct:
@@ -124,13 +136,12 @@ class CheckUpdateThread(QThread):
                             pass
 
                     if not tag_name:
-                        last_error = "无法解析版本号"
-                        continue
+                        raise Exception("无法解析版本号")
 
                     if not self._is_newer(tag_name, CURRENT_VERSION):
-                        return None
+                        return ("no_update", None)
 
-                    # 如果没有从 API 获取到 release notes，尝试单独请求 API
+                    # 获取 release notes
                     if not release_body:
                         try:
                             api_url = f"https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/releases/tags/{tag_name}"
@@ -138,7 +149,7 @@ class CheckUpdateThread(QThread):
                                 "User-Agent": "Mozilla/5.0",
                                 "Accept": "application/json",
                             })
-                            with urllib.request.urlopen(req2, timeout=10) as resp2:
+                            with urllib.request.urlopen(req2, timeout=8) as resp2:
                                 d2 = json.loads(resp2.read().decode("utf-8"))
                                 release_body = d2.get("body", "") or ""
                         except Exception:
@@ -150,11 +161,9 @@ class CheckUpdateThread(QThread):
                         for src in DOWNLOAD_SOURCES
                     ]
                     primary_url = download_urls[0]
-
-                    # 尝试获取 Gitee 分卷列表（国内优先下载源）
                     parts, parts_size = self._get_gitee_parts(tag_name, filename)
 
-                    return UpdateInfo(
+                    info = UpdateInfo(
                         tag_name=tag_name,
                         name=f"闻铎点名器 {tag_name}",
                         body=release_body,
@@ -164,11 +173,23 @@ class CheckUpdateThread(QThread):
                         download_urls=download_urls,
                         parts_urls=parts,
                     )
+                    return ("has_update", info)
             except Exception as e:
-                last_error = e
-                continue
+                return ("error", (url, str(e)))
 
-        raise Exception(f"检查更新失败: {last_error}")
+        with ThreadPoolExecutor(max_workers=min(len(urls), 4)) as executor:
+            futures = {executor.submit(fetch, url): url for url in urls}
+            for future in as_completed(futures):
+                status, payload = future.result()
+                if status == "no_update":
+                    return None
+                if status == "has_update":
+                    return payload
+                if status == "error":
+                    url, err = payload
+                    errors[url] = err
+
+        return None
 
     def _get_gitee_parts(self, tag_name: str, filename: str) -> Tuple[list, int]:
         """从 Gitee Release 获取分卷下载 URL 列表与总大小，失败返回 ([], 0)。"""
@@ -190,7 +211,7 @@ class CheckUpdateThread(QThread):
             with urllib.request.urlopen(req, timeout=15) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
                 assets = data.get("assets", [])
-                # 安装包文件名含 .exe，分卷名不含 .exe，例如 Setup-v3.0.0.part001
+                # 安装包文件名含 .exe，分卷名不含 .exe，例如 Setup-v3.0.1.part001
                 base_filename = os.path.splitext(filename)[0]
                 pattern = re.escape(base_filename) + r"\.part\d{3}$"
                 matched = sorted(

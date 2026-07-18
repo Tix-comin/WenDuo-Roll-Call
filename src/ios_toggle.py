@@ -1,5 +1,5 @@
 """
-iOS风格开关控件 - v3.0.0
+iOS风格开关控件 - v3.0.1
 丝滑的开关动画，用于设置中的动画开关等选项
 """
 from PyQt6.QtWidgets import QWidget, QPushButton

@@ -1,15 +1,15 @@
 """
 UI样式和主题定义 - Apple风格教育主题
-闻铎点名器 v3.0.0 - Styles
+闻铎点名器 v3.0.1 - Styles
 温润、大方、适合课堂教育场景
 """
 
 # ========== Apple 教育风配色 ==========
 # 主色：温润的教育蓝（比科技蓝更柔和）
-PRIMARY = "#007AFF"       # Apple Blue
-PRIMARY_DARK = "#0051D5"
-PRIMARY_LIGHT = "#64D2FF"
-PRIMARY_ULTRALIGHT = "#E0F0FF"
+PRIMARY = "#0066CC"       # Apple Action Blue
+PRIMARY_DARK = "#0051BB"
+PRIMARY_LIGHT = "#5AC8FA"
+PRIMARY_ULTRALIGHT = "#E6F2FF"
 
 # 辅助色：教育友好的活力色
 SECONDARY = "#34C759"     # Apple Green - 积极/成功

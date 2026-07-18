@@ -228,35 +228,65 @@ class DisplayCard(QFrame):
 
 
 class SidebarButton(QPushButton):
-    """侧边栏按钮 - Apple风格列表按钮"""
+    """侧边栏按钮 - Apple风格列表按钮，左侧带英文首字母色块"""
 
     def __init__(self, icon: str, text: str, parent=None):
         super().__init__(parent)
-        self.setText(text)
         self.setCheckable(True)
         self.setFixedHeight(44)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.setStyleSheet("""
-            QPushButton {
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(12, 0, 16, 0)
+        layout.setSpacing(10)
+
+        # 左侧英文首字母色块
+        self.icon_label = QLabel(icon)
+        self.icon_label.setFixedSize(26, 26)
+        self.icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.icon_label.setStyleSheet(f"""
+            background-color: {PRIMARY_ULTRALIGHT};
+            color: {PRIMARY};
+            border-radius: 7px;
+            font-size: 12px;
+            font-weight: 700;
+            font-family: "SF Pro Display", "PingFang SC", "Microsoft YaHei", sans-serif;
+        """)
+
+        self.text_label = QLabel(text)
+        self.text_label.setStyleSheet("""
+            color: #6E6E73;
+            background: transparent;
+            font-size: 14px;
+            font-weight: 500;
+            letter-spacing: 0.5px;
+        """)
+
+        layout.addWidget(self.icon_label)
+        layout.addWidget(self.text_label, 1)
+        layout.addStretch()
+
+        self.setStyleSheet(f"""
+            QPushButton {{
                 background: transparent;
-                color: #6E6E73;
                 border: none;
                 border-radius: 10px;
-                padding: 8px 16px 8px 20px;
+                padding: 0;
                 text-align: left;
-                font-size: 14px;
-                font-weight: 500;
-                letter-spacing: 0.5px;
-            }
-            QPushButton:hover {
+            }}
+            QPushButton:hover {{
                 background-color: #F2F2F7;
+            }}
+            QPushButton:hover QLabel {{
                 color: #1D1D1F;
-            }
-            QPushButton:checked {
-                background-color: #E0F0FF;
-                color: #0051D5;
+            }}
+            QPushButton:checked {{
+                background-color: {PRIMARY_ULTRALIGHT};
+            }}
+            QPushButton:checked QLabel {{
+                color: {PRIMARY};
                 font-weight: 600;
-            }
+            }}
         """)
 
 
@@ -524,11 +554,8 @@ class MainWindow(QWidget):
         layout.setContentsMargins(14, 0, 6, 0)
         layout.setSpacing(10)
 
-        # 图标：品牌首字圆形色块
-        icon_lbl = QLabel("闻")
-        icon_lbl.setStyleSheet("font-size: 14px; font-weight: 700; color: #0066CC; background: #E8F0FE; border-radius: 6px; padding: 2px;")
-        icon_lbl.setFixedSize(28, 28)
-        icon_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        # 图标：品牌英文首字母 W
+        icon_lbl = self._make_icon_badge("W", size=28)
         layout.addWidget(icon_lbl)
 
         # 应用名
@@ -702,10 +729,26 @@ class MainWindow(QWidget):
 
         return topbar
 
-    def _make_row_icon(self, rel_path: str, fallback_emoji: str) -> QWidget:
+    def _make_icon_badge(self, letter: str, color: str = PRIMARY,
+                         bg_color: str = PRIMARY_ULTRALIGHT, size: int = 32) -> QLabel:
+        """构造一个圆角英文首字母色块图标。"""
+        lbl = QLabel(letter)
+        lbl.setFixedSize(size, size)
+        lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        lbl.setStyleSheet(f"""
+            background-color: {bg_color};
+            color: {color};
+            border-radius: {size // 4}px;
+            font-size: {size // 2 - 2}px;
+            font-weight: 700;
+            font-family: "SF Pro Display", "PingFang SC", "Microsoft YaHei", sans-serif;
+        """)
+        return lbl
+
+    def _make_row_icon(self, rel_path: str, fallback_letter: str) -> QWidget:
         """构造一个设置行左侧的图标块：
         - 优先加载 rel_path（PNG/JPG），无背景容器
-        - 缺失时退回到圆形色块 + 首字母
+        - 缺失时退回到圆角色块 + 英文首字母
         """
         path = _resolve_asset(rel_path)
         if path and os.path.exists(path):
@@ -723,15 +766,7 @@ class MainWindow(QWidget):
                     )
                 )
                 return lbl
-        # fallback：圆形色块 + 首字母
-        initial = fallback_emoji.strip()[:1] if fallback_emoji.strip() else "?"
-        lbl = QLabel(initial)
-        lbl.setFixedSize(32, 32)
-        lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        lbl.setStyleSheet(
-            "background-color: #EFF6FF; color: #3B82F6; border-radius: 8px; font-size: 14px; font-weight: 700;"
-        )
-        return lbl
+        return self._make_icon_badge(fallback_letter or "?")
 
     def _build_sidebar(self) -> QWidget:
         """构建左侧栏"""
@@ -781,10 +816,9 @@ class MainWindow(QWidget):
                 chosen_brand = None
 
         if not chosen_brand:
-            # 兜底：品牌文字标签
-            logo_icon = QLabel("闻")
+            # 兜底：品牌英文首字母
+            logo_icon = self._make_icon_badge("W", size=56)
             logo_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            logo_icon.setStyleSheet("font-size: 36px; font-weight: 700; color: #0066CC; background: transparent;")
 
             logo_title = QLabel("闻铎点名器")
             logo_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -812,10 +846,10 @@ class MainWindow(QWidget):
         self.nav_group = QButtonGroup(self)
         self.nav_group.setExclusive(True)
 
-        self.nav_settings = SidebarButton("", "主页")
+        self.nav_settings = SidebarButton("H", "主页")
         self.nav_settings.setChecked(True)
-        self.nav_names = SidebarButton("", "名单")
-        self.nav_history = SidebarButton("", "历史")
+        self.nav_names = SidebarButton("N", "名单")
+        self.nav_history = SidebarButton("R", "历史")
 
         self.nav_group.addButton(self.nav_settings, 0)
         self.nav_group.addButton(self.nav_names, 1)
@@ -878,7 +912,7 @@ class MainWindow(QWidget):
             deco.setStyleSheet("font-size: 40px; color: #3B82F6; background: transparent;")
         bottom_layout.addWidget(deco)
 
-        version = QLabel(f"v3.0.0")
+        version = QLabel(f"v3.0.1")
         version.setAlignment(Qt.AlignmentFlag.AlignCenter)
         version.setStyleSheet(f"color: {TEXT_TERTIARY}; font-size: 11px; background: transparent; font-weight: 500;")
         bottom_layout.addWidget(version)
@@ -996,10 +1030,7 @@ class MainWindow(QWidget):
         speed_layout.setContentsMargins(0, 0, 0, 0)
         speed_layout.setSpacing(12)
 
-        speed_icon = QLabel("速")
-        speed_icon.setFixedSize(32, 32)
-        speed_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        speed_icon.setStyleSheet("background-color: #EFF6FF; color: #3B82F6; border-radius: 8px; font-size: 13px; font-weight: 700;")
+        speed_icon = self._make_icon_badge("S")
         speed_layout.addWidget(speed_icon)
 
         speed_label = QLabel("点名速度")
@@ -1045,7 +1076,7 @@ class MainWindow(QWidget):
         stop_layout.setContentsMargins(0, 0, 0, 0)
         stop_layout.setSpacing(12)
 
-        stop_icon = self._make_row_icon("assets/icons/stop_time.png", "停")
+        stop_icon = self._make_row_icon("assets/icons/stop_time.png", "T")
         stop_layout.addWidget(stop_icon)
 
         stop_label = QLabel("停止时间")
@@ -1091,10 +1122,7 @@ class MainWindow(QWidget):
         batch_layout.setContentsMargins(0, 0, 0, 0)
         batch_layout.setSpacing(12)
 
-        batch_icon = QLabel("批")
-        batch_icon.setFixedSize(32, 32)
-        batch_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        batch_icon.setStyleSheet("background-color: #EFF6FF; color: #3B82F6; border-radius: 8px; font-size: 13px; font-weight: 700;")
+        batch_icon = self._make_icon_badge("B")
         batch_layout.addWidget(batch_icon)
 
         batch_label = QLabel("批量人数")
@@ -1168,10 +1196,7 @@ class MainWindow(QWidget):
         anim_layout.setContentsMargins(0, 0, 0, 0)
         anim_layout.setSpacing(12)
 
-        anim_icon = QLabel("动")
-        anim_icon.setFixedSize(32, 32)
-        anim_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        anim_icon.setStyleSheet(f"background-color: {PRIMARY_ULTRALIGHT}; color: {PRIMARY}; border-radius: 8px; font-size: 13px; font-weight: 700;")
+        anim_icon = self._make_icon_badge("A")
         anim_layout.addWidget(anim_icon)
 
         anim_label = QLabel("丝滑动画")
@@ -1519,10 +1544,7 @@ class MainWindow(QWidget):
         range_layout.setContentsMargins(0, 0, 0, 0)
         range_layout.setSpacing(12)
 
-        range_icon = QLabel("组")
-        range_icon.setFixedSize(28, 28)
-        range_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        range_icon.setStyleSheet("background-color: #ECFDF5; color: #10B981; border-radius: 8px; font-size: 12px; font-weight: 700;")
+        range_icon = self._make_icon_badge("G", color=SECONDARY, bg_color="#ECFDF5", size=28)
         range_layout.addWidget(range_icon)
 
         range_label = QLabel("抽组范围")
@@ -1549,7 +1571,7 @@ class MainWindow(QWidget):
         self.group_start_spin.valueChanged.connect(self._on_group_range_change)
         range_layout.addWidget(self.group_start_spin)
 
-        to_label = QLabel("至")
+        to_label = QLabel("to")
         to_label.setStyleSheet("color: #94A3B8; font-size: 13px;")
         range_layout.addWidget(to_label)
 
@@ -2212,77 +2234,109 @@ class MainWindow(QWidget):
                 self.always_top_btn.setText("已置顶")
 
     def _show_settings_dialog(self):
-        """显示"设置"对话框：动画开关 + 自动更新 + 版本信息 + 检查更新"""
+        """打开与主界面同尺寸的全屏设置页：动画开关 + 自动更新 + 版本信息 + 检查更新"""
         if hasattr(self, "_settings_dialog") and self._settings_dialog and self._settings_dialog.isVisible():
             self._settings_dialog.raise_()
             self._settings_dialog.activateWindow()
             return
 
-        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton
+        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QScrollArea
         from PyQt6.QtCore import Qt as _Qt
 
         dlg = QDialog(self)
         dlg.setWindowTitle("设置 · 闻铎点名器")
-        dlg.setFixedSize(440, 420)
+        dlg.setFixedSize(self.WINDOW_WIDTH, self.WINDOW_HEIGHT)
+        dlg.move(self.pos())
         dlg.setStyleSheet(f"background-color: {BG_MAIN};")
 
         outer = QVBoxLayout(dlg)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
 
-        # 顶部导航栏（Apple风格）
+        # 顶部导航栏（Apple 风格）
         nav = QWidget()
-        nav.setFixedHeight(50)
+        nav.setFixedHeight(56)
         nav.setStyleSheet(f"background-color: {WHITE}; border-bottom: 1px solid {NEUTRAL_5};")
         nav_lay = QHBoxLayout(nav)
-        nav_lay.setContentsMargins(20, 0, 20, 0)
+        nav_lay.setContentsMargins(24, 0, 24, 0)
+        nav_lay.setSpacing(16)
+
+        back_btn = QPushButton("← 返回")
+        back_btn.setFixedHeight(32)
+        back_btn.setCursor(_Qt.CursorShape.PointingHandCursor)
+        back_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {PRIMARY_ULTRALIGHT};
+                color: {PRIMARY};
+                border: none;
+                border-radius: 16px;
+                padding: 0 14px;
+                font-size: 13px;
+                font-weight: 600;
+            }}
+            QPushButton:hover {{ background-color: #CCE4FF; }}
+        """)
+        back_btn.clicked.connect(dlg.accept)
+        nav_lay.addWidget(back_btn)
+
         nav_title = QLabel("设置")
-        nav_title.setStyleSheet(f"font-size: 17px; font-weight: 600; color: {TEXT_PRIMARY}; background: transparent;")
+        nav_title.setStyleSheet(f"font-size: 18px; font-weight: 600; color: {TEXT_PRIMARY}; background: transparent;")
         nav_lay.addWidget(nav_title)
         nav_lay.addStretch()
         outer.addWidget(nav)
 
-        # 内容区
+        # 可滚动内容区
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setStyleSheet("QScrollArea { border: none; background: transparent; }")
+
         content = QWidget()
         content.setStyleSheet("background: transparent;")
         c_lay = QVBoxLayout(content)
-        c_lay.setContentsMargins(20, 16, 20, 16)
-        c_lay.setSpacing(12)
+        c_lay.setContentsMargins(40, 28, 40, 28)
+        c_lay.setSpacing(16)
+        c_lay.setAlignment(_Qt.AlignmentFlag.AlignTop)
 
-        # ---- 动画开关行 ----
+        # 页面标题
+        page_title = QLabel("偏好设置")
+        page_title.setStyleSheet(f"font-size: 28px; font-weight: 600; color: {TEXT_PRIMARY}; background: transparent; letter-spacing: -0.5px;")
+        c_lay.addWidget(page_title)
+
+        page_sub = QLabel("管理动画、更新与版本信息")
+        page_sub.setStyleSheet(f"font-size: 14px; color: {TEXT_SECONDARY}; background: transparent;")
+        c_lay.addWidget(page_sub)
+        c_lay.addSpacing(8)
+
+        # ---- 动画开关卡片 ----
         anim_row = QWidget()
-        anim_row.setStyleSheet(f"background-color: {WHITE}; border-radius: 12px;")
+        anim_row.setStyleSheet(f"background-color: {WHITE}; border-radius: 18px;")
         ar_lay = QHBoxLayout(anim_row)
-        ar_lay.setContentsMargins(16, 12, 16, 12)
-        ar_lay.setSpacing(12)
+        ar_lay.setContentsMargins(20, 16, 20, 16)
+        ar_lay.setSpacing(16)
 
-        anim_icon = QLabel("动")
-        anim_icon.setFixedSize(32, 32)
-        anim_icon.setAlignment(_Qt.AlignmentFlag.AlignCenter)
-        anim_icon.setStyleSheet(f"background-color: {PRIMARY_ULTRALIGHT}; color: {PRIMARY}; border-radius: 8px; font-size: 13px; font-weight: 700;")
+        anim_icon = self._make_icon_badge("A")
         ar_lay.addWidget(anim_icon)
 
         anim_text = QVBoxLayout()
         anim_text.setSpacing(2)
         at1 = QLabel("丝滑动画")
-        at1.setStyleSheet(f"font-size: 14px; font-weight: 600; color: {TEXT_PRIMARY}; background: transparent;")
+        at1.setStyleSheet(f"font-size: 16px; font-weight: 600; color: {TEXT_PRIMARY}; background: transparent;")
         at2 = QLabel("点名弹跳、窗口过渡等效果")
-        at2.setStyleSheet(f"font-size: 12px; color: {TEXT_SECONDARY}; background: transparent;")
+        at2.setStyleSheet(f"font-size: 13px; color: {TEXT_SECONDARY}; background: transparent;")
         anim_text.addWidget(at1)
         anim_text.addWidget(at2)
         ar_lay.addLayout(anim_text, 1)
 
         dlg_anim_toggle = IOSToggle(
             checked=self.settings_manager.get("enable_animations", True),
-            on_color=SECONDARY
+            on_color=PRIMARY
         )
         def _toggle_anim(checked):
             self.settings_manager.set("enable_animations", checked)
             AnimationManager.set_enabled(checked)
-            # 同步主页面的开关
             if hasattr(self, 'anim_toggle') and self.anim_toggle.isChecked() != checked:
                 self.anim_toggle.setChecked(checked, animated=False)
-            # 刷新悬浮球
             app = QApplication.instance()
             for w in app.topLevelWidgets():
                 if hasattr(w, 'floating_ball'):
@@ -2294,32 +2348,29 @@ class MainWindow(QWidget):
         ar_lay.addWidget(dlg_anim_toggle)
         c_lay.addWidget(anim_row)
 
-        # ---- 自动更新开关行 ----
+        # ---- 自动更新开关卡片 ----
         update_row = QWidget()
-        update_row.setStyleSheet(f"background-color: {WHITE}; border-radius: 12px;")
+        update_row.setStyleSheet(f"background-color: {WHITE}; border-radius: 18px;")
         ur_lay = QHBoxLayout(update_row)
-        ur_lay.setContentsMargins(16, 12, 16, 12)
-        ur_lay.setSpacing(12)
+        ur_lay.setContentsMargins(20, 16, 20, 16)
+        ur_lay.setSpacing(16)
 
-        up_icon = QLabel("更")
-        up_icon.setFixedSize(32, 32)
-        up_icon.setAlignment(_Qt.AlignmentFlag.AlignCenter)
-        up_icon.setStyleSheet(f"background-color: #FFF3E0; color: {WARNING}; border-radius: 8px; font-size: 13px; font-weight: 700;")
+        up_icon = self._make_icon_badge("U", color=WARNING, bg_color="#FFF3E0")
         ur_lay.addWidget(up_icon)
 
         up_text = QVBoxLayout()
         up_text.setSpacing(2)
         ut1 = QLabel("自动检查更新")
-        ut1.setStyleSheet(f"font-size: 14px; font-weight: 600; color: {TEXT_PRIMARY}; background: transparent;")
+        ut1.setStyleSheet(f"font-size: 16px; font-weight: 600; color: {TEXT_PRIMARY}; background: transparent;")
         ut2 = QLabel("启动时自动检查新版本")
-        ut2.setStyleSheet(f"font-size: 12px; color: {TEXT_SECONDARY}; background: transparent;")
+        ut2.setStyleSheet(f"font-size: 13px; color: {TEXT_SECONDARY}; background: transparent;")
         up_text.addWidget(ut1)
         up_text.addWidget(ut2)
         ur_lay.addLayout(up_text, 1)
 
         dlg_update_toggle = IOSToggle(
             checked=self.settings_manager.get("auto_check_update", True),
-            on_color=SECONDARY
+            on_color=PRIMARY
         )
         def _toggle_auto_update(checked):
             self.settings_manager.set("auto_check_update", checked)
@@ -2329,20 +2380,25 @@ class MainWindow(QWidget):
 
         # ---- 版本信息卡片 ----
         ver_card = QWidget()
-        ver_card.setStyleSheet(f"background-color: {WHITE}; border-radius: 12px;")
+        ver_card.setStyleSheet(f"background-color: {WHITE}; border-radius: 18px;")
         vr_lay = QVBoxLayout(ver_card)
-        vr_lay.setContentsMargins(16, 14, 16, 14)
-        vr_lay.setSpacing(8)
+        vr_lay.setContentsMargins(24, 22, 24, 22)
+        vr_lay.setSpacing(18)
 
-        ver_row = QHBoxLayout()
-        ver_label = QLabel("当前版本")
-        ver_label.setStyleSheet(f"font-size: 14px; color: {TEXT_SECONDARY}; background: transparent;")
-        ver_row.addWidget(ver_label)
-        ver_row.addStretch()
-        ver_num = QLabel(CURRENT_VERSION)
-        ver_num.setStyleSheet(f"font-size: 14px; font-weight: 600; color: {PRIMARY_DARK}; background: transparent;")
-        ver_row.addWidget(ver_num)
-        vr_lay.addLayout(ver_row)
+        ver_header = QHBoxLayout()
+        ver_header.setSpacing(16)
+        ver_icon = self._make_icon_badge("V")
+        ver_header.addWidget(ver_icon)
+        ver_title = QVBoxLayout()
+        ver_title.setSpacing(2)
+        vt1 = QLabel("版本信息")
+        vt1.setStyleSheet(f"font-size: 16px; font-weight: 600; color: {TEXT_PRIMARY}; background: transparent;")
+        vt2 = QLabel(f"闻铎点名器 {CURRENT_VERSION}")
+        vt2.setStyleSheet(f"font-size: 13px; color: {TEXT_SECONDARY}; background: transparent;")
+        ver_title.addWidget(vt1)
+        ver_title.addWidget(vt2)
+        ver_header.addLayout(ver_title, 1)
+        vr_lay.addLayout(ver_header)
 
         # 分隔线
         sep = QFrame()
@@ -2350,22 +2406,20 @@ class MainWindow(QWidget):
         sep.setStyleSheet(f"background-color: {NEUTRAL_5}; max-height: 1px; border: none;")
         vr_lay.addWidget(sep)
 
-        # 检查更新按钮
+        # 检查更新按钮（Apple 胶囊按钮）
         self._dlg_update_btn = QPushButton("检查更新")
-        self._dlg_update_btn.setFixedHeight(38)
+        self._dlg_update_btn.setFixedHeight(44)
         self._dlg_update_btn.setCursor(_Qt.CursorShape.PointingHandCursor)
         self._dlg_update_btn.setStyleSheet(f"""
             QPushButton {{
-                background-color: {PRIMARY_ULTRALIGHT};
-                color: {PRIMARY_DARK};
+                background-color: {PRIMARY};
+                color: {WHITE};
                 border: none;
-                border-radius: 10px;
-                font-size: 14px;
+                border-radius: 22px;
+                font-size: 15px;
                 font-weight: 600;
             }}
-            QPushButton:hover {{
-                background-color: #CCE4FF;
-            }}
+            QPushButton:hover {{ background-color: {PRIMARY_DARK}; }}
             QPushButton:disabled {{
                 color: {TEXT_TERTIARY};
                 background-color: {NEUTRAL_6};
@@ -2375,32 +2429,10 @@ class MainWindow(QWidget):
         vr_lay.addWidget(self._dlg_update_btn)
 
         c_lay.addWidget(ver_card)
-
         c_lay.addStretch()
 
-        # 关闭按钮
-        btn_row = QHBoxLayout()
-        btn_row.addStretch()
-        close_btn = QPushButton("完成")
-        close_btn.setFixedHeight(36)
-        close_btn.setFixedWidth(100)
-        close_btn.setCursor(_Qt.CursorShape.PointingHandCursor)
-        close_btn.setStyleSheet(f"""
-            QPushButton {{
-                background-color: {PRIMARY};
-                color: #FFFFFF;
-                border-radius: 18px;
-                font-size: 14px;
-                font-weight: 600;
-            }}
-            QPushButton:hover {{ background-color: {PRIMARY_DARK}; }}
-        """)
-        close_btn.clicked.connect(dlg.accept)
-        btn_row.addWidget(close_btn)
-        btn_row.addStretch()
-        c_lay.addLayout(btn_row)
-
-        outer.addWidget(content, 1)
+        scroll.setWidget(content)
+        outer.addWidget(scroll, 1)
 
         self._settings_dialog = dlg
         dlg.exec()
