@@ -22,7 +22,7 @@ from src.data_manager import NameListManager, HistoryManager, SettingsManager
 from src.picker_engine import PickerEngine
 from src.tts_engine import TTSEngine
 from src.updater import (
-    CheckUpdateThread, DownloadThread, UpdateInfo,
+    CheckUpdateThread, DownloadThread, DownloadPartsThread, UpdateInfo,
     CURRENT_VERSION, launch_installer, get_save_dir
 )
 from src.styles import (
@@ -232,7 +232,7 @@ class SidebarButton(QPushButton):
 
     def __init__(self, icon: str, text: str, parent=None):
         super().__init__(parent)
-        self.setText(f"  {icon}   {text}")
+        self.setText(text)
         self.setCheckable(True)
         self.setFixedHeight(44)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -242,10 +242,11 @@ class SidebarButton(QPushButton):
                 color: #6E6E73;
                 border: none;
                 border-radius: 10px;
-                padding: 8px 16px;
+                padding: 8px 16px 8px 20px;
                 text-align: left;
                 font-size: 14px;
                 font-weight: 500;
+                letter-spacing: 0.5px;
             }
             QPushButton:hover {
                 background-color: #F2F2F7;
@@ -264,7 +265,7 @@ class ActionButton(QPushButton):
 
     def __init__(self, icon: str, text: str, color: str, parent=None):
         super().__init__(parent)
-        self.setText(f"  {icon}  {text}")
+        self.setText(text)
         self.setFixedHeight(48)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self._color = color
@@ -377,15 +378,17 @@ class SettingsRow(QFrame):
         layout.setContentsMargins(0, 4, 0, 4)
         layout.setSpacing(12)
 
-        # 左侧图标块
-        icon_label = QLabel(icon)
+        # 左侧圆形色块（首字母）
+        initial = label[0] if label else ""
+        icon_label = QLabel(initial)
         icon_label.setFixedSize(28, 28)
         icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         icon_label.setStyleSheet(f"""
             background-color: #EFF6FF;
             color: {PRIMARY};
             border-radius: 8px;
-            font-size: 14px;
+            font-size: 13px;
+            font-weight: 700;
         """)
 
         # 标签
@@ -521,10 +524,11 @@ class MainWindow(QWidget):
         layout.setContentsMargins(14, 0, 6, 0)
         layout.setSpacing(10)
 
-        # 图标
-        icon_lbl = QLabel("📚")
-        icon_lbl.setStyleSheet("font-size: 20px; background: transparent;")
-        icon_lbl.setFixedWidth(28)
+        # 图标：品牌首字圆形色块
+        icon_lbl = QLabel("闻")
+        icon_lbl.setStyleSheet("font-size: 14px; font-weight: 700; color: #0066CC; background: #E8F0FE; border-radius: 6px; padding: 2px;")
+        icon_lbl.setFixedSize(28, 28)
+        icon_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(icon_lbl)
 
         # 应用名
@@ -637,7 +641,7 @@ class MainWindow(QWidget):
         layout.setSpacing(12)
 
         # 左侧：置顶按钮（向左移，不占满）
-        self.always_top_btn = QPushButton("  📌  置顶")
+        self.always_top_btn = QPushButton("置顶")
         self.always_top_btn.setFixedHeight(32)
         self.always_top_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.always_top_btn.setStyleSheet("""
@@ -666,7 +670,7 @@ class MainWindow(QWidget):
         layout.addStretch()
 
         # 右侧：设置按钮
-        self.settings_btn = QPushButton("  ⚙  设置")
+        self.settings_btn = QPushButton("设置")
         self.settings_btn.setFixedHeight(32)
         self.settings_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.settings_btn.setStyleSheet("""
@@ -689,7 +693,7 @@ class MainWindow(QWidget):
         layout.addWidget(self.settings_btn)
 
         # 右侧：关于按钮
-        self.about_btn = QPushButton("  ℹ  关于")
+        self.about_btn = QPushButton("关于")
         self.about_btn.setFixedHeight(32)
         self.about_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.about_btn.setStyleSheet(self.settings_btn.styleSheet())
@@ -701,7 +705,7 @@ class MainWindow(QWidget):
     def _make_row_icon(self, rel_path: str, fallback_emoji: str) -> QWidget:
         """构造一个设置行左侧的图标块：
         - 优先加载 rel_path（PNG/JPG），无背景容器
-        - 缺失时退回到原 emoji + 浅蓝圆形容器
+        - 缺失时退回到圆形色块 + 首字母
         """
         path = _resolve_asset(rel_path)
         if path and os.path.exists(path):
@@ -719,12 +723,13 @@ class MainWindow(QWidget):
                     )
                 )
                 return lbl
-        # fallback
-        lbl = QLabel(fallback_emoji)
+        # fallback：圆形色块 + 首字母
+        initial = fallback_emoji.strip()[:1] if fallback_emoji.strip() else "?"
+        lbl = QLabel(initial)
         lbl.setFixedSize(32, 32)
         lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         lbl.setStyleSheet(
-            "background-color: #EFF6FF; color: #3B82F6; border-radius: 8px; font-size: 16px;"
+            "background-color: #EFF6FF; color: #3B82F6; border-radius: 8px; font-size: 14px; font-weight: 700;"
         )
         return lbl
 
@@ -776,10 +781,10 @@ class MainWindow(QWidget):
                 chosen_brand = None
 
         if not chosen_brand:
-            # 兜底：emoji + 文字
-            logo_icon = QLabel("🎓")
+            # 兜底：品牌文字标签
+            logo_icon = QLabel("闻")
             logo_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            logo_icon.setStyleSheet("font-size: 48px; background: transparent;")
+            logo_icon.setStyleSheet("font-size: 36px; font-weight: 700; color: #0066CC; background: transparent;")
 
             logo_title = QLabel("闻铎点名器")
             logo_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -807,10 +812,10 @@ class MainWindow(QWidget):
         self.nav_group = QButtonGroup(self)
         self.nav_group.setExclusive(True)
 
-        self.nav_settings = SidebarButton("⚙", "主页")
+        self.nav_settings = SidebarButton("", "主页")
         self.nav_settings.setChecked(True)
-        self.nav_names = SidebarButton("👥", "名单")
-        self.nav_history = SidebarButton("📜", "历史")
+        self.nav_names = SidebarButton("", "名单")
+        self.nav_history = SidebarButton("", "历史")
 
         self.nav_group.addButton(self.nav_settings, 0)
         self.nav_group.addButton(self.nav_names, 1)
@@ -866,11 +871,11 @@ class MainWindow(QWidget):
                     )
                 )
             else:
-                deco.setText("🗳")
-                deco.setStyleSheet("font-size: 56px; background: transparent;")
+                deco.setText("●")
+                deco.setStyleSheet("font-size: 40px; color: #3B82F6; background: transparent;")
         else:
-            deco.setText("🗳")
-            deco.setStyleSheet("font-size: 56px; background: transparent;")
+            deco.setText("●")
+            deco.setStyleSheet("font-size: 40px; color: #3B82F6; background: transparent;")
         bottom_layout.addWidget(deco)
 
         version = QLabel(f"v2.0.0")
@@ -938,15 +943,15 @@ class MainWindow(QWidget):
         btn_row = QHBoxLayout()
         btn_row.setSpacing(12)
 
-        self.start_btn = ActionButton("▶", "开始点名", PRIMARY)
+        self.start_btn = ActionButton("", "开始点名", PRIMARY)
         self.start_btn.setFixedHeight(44)
         self.start_btn.clicked.connect(self._toggle_rolling)
 
-        self.batch_btn = ActionButton("📋", "批量抽取", ACCENT)
+        self.batch_btn = ActionButton("", "批量抽取", ACCENT)
         self.batch_btn.setFixedHeight(44)
         self.batch_btn.clicked.connect(self._do_batch_pick)
 
-        self.group_btn = ActionButton("👥", "抽组", SECONDARY)
+        self.group_btn = ActionButton("", "抽组", SECONDARY)
         self.group_btn.setFixedHeight(44)
         self.group_btn.clicked.connect(self._show_group_page)
 
@@ -980,7 +985,7 @@ class MainWindow(QWidget):
         sc_layout.setSpacing(12)
 
         # 标题
-        sc_title = QLabel("≡  点名设置")
+        sc_title = QLabel("点名设置")
         sc_title.setStyleSheet("font-size: 14px; font-weight: 600; color: #475569; background: transparent;")
         sc_layout.addWidget(sc_title)
 
@@ -991,10 +996,10 @@ class MainWindow(QWidget):
         speed_layout.setContentsMargins(0, 0, 0, 0)
         speed_layout.setSpacing(12)
 
-        speed_icon = QLabel("⚡")
+        speed_icon = QLabel("速")
         speed_icon.setFixedSize(32, 32)
         speed_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        speed_icon.setStyleSheet("background-color: #EFF6FF; color: #3B82F6; border-radius: 8px; font-size: 16px;")
+        speed_icon.setStyleSheet("background-color: #EFF6FF; color: #3B82F6; border-radius: 8px; font-size: 13px; font-weight: 700;")
         speed_layout.addWidget(speed_icon)
 
         speed_label = QLabel("点名速度")
@@ -1040,7 +1045,7 @@ class MainWindow(QWidget):
         stop_layout.setContentsMargins(0, 0, 0, 0)
         stop_layout.setSpacing(12)
 
-        stop_icon = self._make_row_icon("assets/icons/stop_time.png", "⏱")
+        stop_icon = self._make_row_icon("assets/icons/stop_time.png", "停")
         stop_layout.addWidget(stop_icon)
 
         stop_label = QLabel("停止时间")
@@ -1086,10 +1091,10 @@ class MainWindow(QWidget):
         batch_layout.setContentsMargins(0, 0, 0, 0)
         batch_layout.setSpacing(12)
 
-        batch_icon = QLabel("👥")
+        batch_icon = QLabel("批")
         batch_icon.setFixedSize(32, 32)
         batch_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        batch_icon.setStyleSheet("background-color: #EFF6FF; color: #3B82F6; border-radius: 8px; font-size: 16px;")
+        batch_icon.setStyleSheet("background-color: #EFF6FF; color: #3B82F6; border-radius: 8px; font-size: 13px; font-weight: 700;")
         batch_layout.addWidget(batch_icon)
 
         batch_label = QLabel("批量人数")
@@ -1163,10 +1168,10 @@ class MainWindow(QWidget):
         anim_layout.setContentsMargins(0, 0, 0, 0)
         anim_layout.setSpacing(12)
 
-        anim_icon = QLabel("✨")
+        anim_icon = QLabel("动")
         anim_icon.setFixedSize(32, 32)
         anim_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        anim_icon.setStyleSheet(f"background-color: {PRIMARY_ULTRALIGHT}; color: {PRIMARY}; border-radius: 8px; font-size: 16px;")
+        anim_icon.setStyleSheet(f"background-color: {PRIMARY_ULTRALIGHT}; color: {PRIMARY}; border-radius: 8px; font-size: 13px; font-weight: 700;")
         anim_layout.addWidget(anim_icon)
 
         anim_label = QLabel("丝滑动画")
@@ -1191,7 +1196,7 @@ class MainWindow(QWidget):
         bottom_row = QHBoxLayout()
         bottom_row.setSpacing(12)
 
-        self.reset_btn = QPushButton("  ↻  恢复默认")
+        self.reset_btn = QPushButton("恢复默认")
         self.reset_btn.setFixedHeight(42)
         self.reset_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.reset_btn.setStyleSheet("""
@@ -1210,7 +1215,7 @@ class MainWindow(QWidget):
         self.reset_btn.clicked.connect(self._reset_to_default)
         bottom_row.addWidget(self.reset_btn, 1)
 
-        self.clear_history_btn = QPushButton("  🗑  清除历史")
+        self.clear_history_btn = QPushButton("清除历史")
         self.clear_history_btn.setFixedHeight(42)
         self.clear_history_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.clear_history_btn.setStyleSheet("""
@@ -1302,7 +1307,7 @@ class MainWindow(QWidget):
         op_row = QHBoxLayout()
         op_row.setSpacing(8)
 
-        import_btn = QPushButton("📥 导入名单")
+        import_btn = QPushButton("导入名单")
         import_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         import_btn.setStyleSheet("""
             QPushButton {
@@ -1320,13 +1325,13 @@ class MainWindow(QWidget):
         import_btn.clicked.connect(self._import_names)
         op_row.addWidget(import_btn)
 
-        export_btn = QPushButton("📤 导出名单")
+        export_btn = QPushButton("导出名单")
         export_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         export_btn.setStyleSheet(import_btn.styleSheet())
         export_btn.clicked.connect(self._export_names)
         op_row.addWidget(export_btn)
 
-        clear_names_btn = QPushButton("🗑 清空名单")
+        clear_names_btn = QPushButton("清空名单")
         clear_names_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         clear_names_btn.setStyleSheet("""
             QPushButton {
@@ -1459,7 +1464,7 @@ class MainWindow(QWidget):
         back_row = QHBoxLayout()
         back_row.setSpacing(8)
 
-        self.group_back_btn = QPushButton("  ←  返回")
+        self.group_back_btn = QPushButton("返回")
         self.group_back_btn.setFixedHeight(36)
         self.group_back_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.group_back_btn.setStyleSheet("""
@@ -1503,7 +1508,7 @@ class MainWindow(QWidget):
         sc_layout.setSpacing(14)
 
         # 标题
-        sc_title = QLabel("🎯  抽组设置")
+        sc_title = QLabel("抽组设置")
         sc_title.setStyleSheet("font-size: 14px; font-weight: 600; color: #475569; background: transparent;")
         sc_layout.addWidget(sc_title)
 
@@ -1514,10 +1519,10 @@ class MainWindow(QWidget):
         range_layout.setContentsMargins(0, 0, 0, 0)
         range_layout.setSpacing(12)
 
-        range_icon = QLabel("🔢")
+        range_icon = QLabel("组")
         range_icon.setFixedSize(28, 28)
         range_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        range_icon.setStyleSheet("background-color: #ECFDF5; color: #10B981; border-radius: 8px; font-size: 13px;")
+        range_icon.setStyleSheet("background-color: #ECFDF5; color: #10B981; border-radius: 8px; font-size: 12px; font-weight: 700;")
         range_layout.addWidget(range_icon)
 
         range_label = QLabel("抽组范围")
@@ -1610,7 +1615,7 @@ class MainWindow(QWidget):
         layout.addWidget(settings_card)
 
         # 开始抽组按钮
-        self.group_start_btn = QPushButton("  🎯  开始抽组")
+        self.group_start_btn = QPushButton("开始抽组")
         self.group_start_btn.setFixedHeight(52)
         self.group_start_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.group_start_btn.setStyleSheet(f"""
@@ -1634,7 +1639,7 @@ class MainWindow(QWidget):
         layout.addWidget(self.group_start_btn)
 
         # 清空抽组记录按钮
-        self.clear_group_btn = QPushButton("  \U0001f5d1\ufe0f  清空抽组记录")
+        self.clear_group_btn = QPushButton("清空抽组记录")
         self.clear_group_btn.setFixedHeight(42)
         self.clear_group_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.clear_group_btn.setStyleSheet("""
@@ -1683,7 +1688,7 @@ class MainWindow(QWidget):
         self.header_title.setText("抽组")
         # 重置抽组按钮状态
         if hasattr(self, "group_btn"):
-            self.group_btn.setText("  \U0001f465  抽组")
+            self.group_btn.setText("抽组")
             self.group_btn.setStyleSheet("")
         # 重置显示卡片
         if hasattr(self, "group_display_card"):
@@ -1708,7 +1713,7 @@ class MainWindow(QWidget):
             return
 
         self._is_rolling = True
-        self.start_btn.setText("  ⏹  停止点名")
+        self.start_btn.setText("停止点名")
         self.start_btn.setStyleSheet("""
             QPushButton {
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
@@ -1769,7 +1774,7 @@ class MainWindow(QWidget):
             self._rolling_timer = None
 
         self._is_rolling = False
-        self.start_btn.setText("  ▶  开始点名")
+        self.start_btn.setText("开始点名")
         self.start_btn.setStyleSheet(f"""
             QPushButton {{
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
@@ -1818,7 +1823,7 @@ class MainWindow(QWidget):
         self._batch_results = list(results)
         self._batch_index = 0
         self._is_batch_rolling = True
-        self.batch_btn.setText("  ⏹  停止朗读")
+        self.batch_btn.setText("停止朗读")
         self.batch_btn.setStyleSheet("""
             QPushButton {
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
@@ -1866,7 +1871,7 @@ class MainWindow(QWidget):
         self._reset_batch_btn()
 
     def _reset_batch_btn(self):
-        self.batch_btn.setText("  📋  批量抽取")
+        self.batch_btn.setText("批量抽取")
         # 直接用 ActionButton 自带的样式恢复机制
         if hasattr(self.batch_btn, '_apply_style') and hasattr(self.batch_btn, '_color'):
             self.batch_btn._apply_style(self.batch_btn._color)
@@ -1896,7 +1901,7 @@ class MainWindow(QWidget):
 
     def _start_group_rolling(self):
         self._is_group_rolling = True
-        self.group_btn.setText("  ⏹  停止抽组")
+        self.group_btn.setText("停止抽组")
         self.group_btn.setStyleSheet("""
             QPushButton {
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
@@ -1957,7 +1962,7 @@ class MainWindow(QWidget):
             self._rolling_timer = None
 
         self._is_group_rolling = False
-        self.group_btn.setText("  👥  抽组")
+        self.group_btn.setText("抽组")
         self.group_btn.setStyleSheet(f"""
             QPushButton {{
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
@@ -2191,20 +2196,20 @@ class MainWindow(QWidget):
             if self._is_always_on_top:
                 # 取消置顶
                 user32.SetWindowPos(hwnd, wintypes.HWND(HWND_NOTOPMOST), 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE)
-                self.always_top_btn.setText("📌 置顶")
+                self.always_top_btn.setText("置顶")
                 self._is_always_on_top = False
             else:
                 # 置顶
                 user32.SetWindowPos(hwnd, wintypes.HWND(HWND_TOPMOST), 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE)
-                self.always_top_btn.setText("📍 已置顶")
+                self.always_top_btn.setText("已置顶")
                 self._is_always_on_top = True
         except Exception:
             # 非 Windows：fallback（尽量保留，不调用 setWindowFlags）
             flags = self.windowFlags()
             if flags & Qt.WindowType.WindowStaysOnTopHint:
-                self.always_top_btn.setText("📌 置顶")
+                self.always_top_btn.setText("置顶")
             else:
-                self.always_top_btn.setText("📍 已置顶")
+                self.always_top_btn.setText("已置顶")
 
     def _show_settings_dialog(self):
         """显示"设置"对话框：动画开关 + 自动更新 + 版本信息 + 检查更新"""
@@ -2251,10 +2256,10 @@ class MainWindow(QWidget):
         ar_lay.setContentsMargins(16, 12, 16, 12)
         ar_lay.setSpacing(12)
 
-        anim_icon = QLabel("✨")
+        anim_icon = QLabel("动")
         anim_icon.setFixedSize(32, 32)
         anim_icon.setAlignment(_Qt.AlignmentFlag.AlignCenter)
-        anim_icon.setStyleSheet(f"background-color: {PRIMARY_ULTRALIGHT}; border-radius: 8px; font-size: 16px;")
+        anim_icon.setStyleSheet(f"background-color: {PRIMARY_ULTRALIGHT}; color: {PRIMARY}; border-radius: 8px; font-size: 13px; font-weight: 700;")
         ar_lay.addWidget(anim_icon)
 
         anim_text = QVBoxLayout()
@@ -2296,10 +2301,10 @@ class MainWindow(QWidget):
         ur_lay.setContentsMargins(16, 12, 16, 12)
         ur_lay.setSpacing(12)
 
-        up_icon = QLabel("↻")
+        up_icon = QLabel("更")
         up_icon.setFixedSize(32, 32)
         up_icon.setAlignment(_Qt.AlignmentFlag.AlignCenter)
-        up_icon.setStyleSheet(f"background-color: #FFF3E0; color: {WARNING}; border-radius: 8px; font-size: 16px; font-weight: bold;")
+        up_icon.setStyleSheet(f"background-color: #FFF3E0; color: {WARNING}; border-radius: 8px; font-size: 13px; font-weight: 700;")
         ur_lay.addWidget(up_icon)
 
         up_text = QVBoxLayout()
@@ -2346,7 +2351,7 @@ class MainWindow(QWidget):
         vr_lay.addWidget(sep)
 
         # 检查更新按钮
-        self._dlg_update_btn = QPushButton("  ↻  检查更新")
+        self._dlg_update_btn = QPushButton("检查更新")
         self._dlg_update_btn.setFixedHeight(38)
         self._dlg_update_btn.setCursor(_Qt.CursorShape.PointingHandCursor)
         self._dlg_update_btn.setStyleSheet(f"""
@@ -2644,7 +2649,7 @@ class MainWindow(QWidget):
         self._update_btn_ref = button
         if button is not None:
             button.setEnabled(False)
-            button.setText("  ⏳  检查中...")
+            button.setText("检查中...")
 
         self._check_thread = CheckUpdateThread()
         self._check_thread.finished.connect(self._on_check_finished)
@@ -2654,7 +2659,7 @@ class MainWindow(QWidget):
         button = getattr(self, "_update_btn_ref", None)
         if button is not None:
             button.setEnabled(True)
-            button.setText("  ↻  检查更新")
+            button.setText("检查更新")
         self._update_btn_ref = None
 
         if error_msg:
@@ -2700,7 +2705,10 @@ class MainWindow(QWidget):
         dlg_layout.setContentsMargins(24, 20, 24, 20)
         dlg_layout.setSpacing(12)
 
-        title_label = QLabel(f"正在下载 {info.filename}")
+        if info.parts_urls:
+            title_label = QLabel(f"正在下载 {info.filename}（Gitee 分卷）")
+        else:
+            title_label = QLabel(f"正在下载 {info.filename}")
         title_label.setStyleSheet("font-size: 14px; font-weight: 600; color: #1E293B;")
         dlg_layout.addWidget(title_label)
 
@@ -2750,7 +2758,10 @@ class MainWindow(QWidget):
         btn_row.addWidget(self._cancel_download_btn)
         dlg_layout.addLayout(btn_row)
 
-        self._download_thread = DownloadThread(info.download_urls, save_path)
+        if info.parts_urls:
+            self._download_thread = DownloadPartsThread(info.parts_urls, save_path)
+        else:
+            self._download_thread = DownloadThread(info.download_urls, save_path)
         self._download_thread.progress.connect(self._on_download_progress)
         self._download_thread.speed.connect(self._on_download_speed)
         self._download_thread.finished.connect(self._on_download_finished)

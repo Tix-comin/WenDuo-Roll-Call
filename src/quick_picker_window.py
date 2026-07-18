@@ -175,20 +175,22 @@ class QuickPickerWindow(QWidget):
         self.top_open_main_btn.clicked.connect(self._open_main_window_clicked)
 
         # 悬浮球显示/隐藏切换按钮
-        self.top_ball_toggle_btn = QPushButton("🟢", top_bar)
+        self.top_ball_toggle_btn = QPushButton("●", top_bar)
         self.top_ball_toggle_btn.setGeometry(self.WINDOW_WIDTH - 88, 9, btn_size, btn_size)
         self.top_ball_toggle_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.top_ball_toggle_btn.setToolTip("显示/隐藏悬浮球")
         self.top_ball_toggle_btn.setStyleSheet("""
             QPushButton {
                 background: rgba(255, 255, 255, 0.22);
-                color: white;
+                color: #10B981;
                 border: none;
                 border-radius: 15px;
-                font-size: 14px;
+                font-size: 16px;
+                font-weight: bold;
             }
             QPushButton:hover {
                 background: rgba(16, 185, 129, 0.6);
+                color: white;
             }
         """)
         self.top_ball_toggle_btn.clicked.connect(self._toggle_floating_ball)
@@ -275,7 +277,7 @@ class QuickPickerWindow(QWidget):
         btn_width = (self.WINDOW_WIDTH - 48 - 16) // 3
 
         # 批量抽取
-        self.batch_btn = QPushButton("📋 批量", container)
+        self.batch_btn = QPushButton("批量", container)
         self.batch_btn.setGeometry(24, bottom_y, btn_width, 42)
         self.batch_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.batch_btn.setStyleSheet(f"""
@@ -297,7 +299,7 @@ class QuickPickerWindow(QWidget):
         self.batch_btn.clicked.connect(self._do_batch_pick)
 
         # 抽组
-        self.group_btn = QPushButton("👥 抽组", container)
+        self.group_btn = QPushButton("抽组", container)
         self.group_btn.setGeometry(32 + btn_width, bottom_y, btn_width, 42)
         self.group_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.group_btn.setStyleSheet(f"""
@@ -319,7 +321,7 @@ class QuickPickerWindow(QWidget):
         self.group_btn.clicked.connect(self._do_group_pick)
 
         # 清除历史
-        self.like_btn = QPushButton("🗑 清除历史", container)
+        self.like_btn = QPushButton("清除历史", container)
         self.like_btn.setGeometry(40 + btn_width * 2, bottom_y, btn_width, 42)
         self.like_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.like_btn.setStyleSheet(f"""
@@ -340,11 +342,11 @@ class QuickPickerWindow(QWidget):
         """)
         self.like_btn.clicked.connect(self._on_like)
 
-        # 底部链接样式按钮行（⚙ 完整设置  |  🟢 显示/隐藏小球  |  ✕ 退出应用）
+        # 底部链接样式按钮行（完整设置  |  显示/隐藏小球  |  ✕ 关闭小窗）
         bottom_row_y = self.WINDOW_HEIGHT - 38
         bottom_width_each = (self.WINDOW_WIDTH - 48) // 3
 
-        self.open_main_btn = QPushButton("⚙ 完整设置", container)
+        self.open_main_btn = QPushButton("完整设置", container)
         self.open_main_btn.setGeometry(24, bottom_row_y, bottom_width_each, 26)
         self.open_main_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.open_main_btn.setStyleSheet("""
@@ -360,7 +362,7 @@ class QuickPickerWindow(QWidget):
             }
         """)
 
-        self.ball_toggle_btn = QPushButton("🟢 隐藏小球", container)
+        self.ball_toggle_btn = QPushButton("● 隐藏小球", container)
         self.ball_toggle_btn.setGeometry(24 + bottom_width_each, bottom_row_y, bottom_width_each, 26)
         self.ball_toggle_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.ball_toggle_btn.setStyleSheet("""
@@ -473,7 +475,7 @@ class QuickPickerWindow(QWidget):
             return
 
         self._is_rolling = True
-        self.start_btn.setText("  ⏹  停止点名")
+        self.start_btn.setText("  ■  停止点名")
         self._apply_primary_style(rolling=True)
 
         self._rolling_sequence = self.picker_engine.get_rolling_sequence(100)
@@ -554,7 +556,7 @@ class QuickPickerWindow(QWidget):
         self._batch_results = list(results)
         self._batch_index = 0
         self._is_batch_rolling = True
-        self.batch_btn.setText("⏹ 停止朗读")
+        self.batch_btn.setText("■ 停止朗读")
         self.batch_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: #FFF0F0;
@@ -601,7 +603,7 @@ class QuickPickerWindow(QWidget):
         self._reset_batch_btn()
 
     def _reset_batch_btn(self):
-        self.batch_btn.setText("📋 批量")
+        self.batch_btn.setText("批量")
         self.batch_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: #F5F0FF;
@@ -645,7 +647,7 @@ class QuickPickerWindow(QWidget):
             QTimer.singleShot(800, self._reset_like_style)
 
     def _reset_like_style(self):
-        self.like_btn.setText("🗑 清除历史")
+        self.like_btn.setText("清除历史")
         self.like_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: #FFF0F0;
@@ -671,16 +673,16 @@ class QuickPickerWindow(QWidget):
         if ball.isVisible():
             ball.hide()
             if hasattr(self, 'ball_toggle_btn') and self.ball_toggle_btn is not None:
-                self.ball_toggle_btn.setText("🟢 显示小球")
+                self.ball_toggle_btn.setText("● 显示小球")
             if hasattr(self, 'top_ball_toggle_btn') and self.top_ball_toggle_btn is not None:
-                self.top_ball_toggle_btn.setText("⚫")
+                self.top_ball_toggle_btn.setText("○")
                 self.top_ball_toggle_btn.setToolTip("显示悬浮球")
         else:
             ball.show()
             if hasattr(self, 'ball_toggle_btn') and self.ball_toggle_btn is not None:
-                self.ball_toggle_btn.setText("🟢 隐藏小球")
+                self.ball_toggle_btn.setText("● 隐藏小球")
             if hasattr(self, 'top_ball_toggle_btn') and self.top_ball_toggle_btn is not None:
-                self.top_ball_toggle_btn.setText("🟢")
+                self.top_ball_toggle_btn.setText("●")
                 self.top_ball_toggle_btn.setToolTip("隐藏悬浮球")
         cb = getattr(self, 'ball_state_changed_callback', None)
         if cb is not None:
