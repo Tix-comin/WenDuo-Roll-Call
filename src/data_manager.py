@@ -58,7 +58,9 @@ DEFAULT_SETTINGS = {
     "batch_count": 5,          # 批量抽取人数
     "allow_repeat": False,     # 是否允许重复抽取
     "group_repeat": False,     # 抽组是否允许重复
-    "theme": "blue"            # 主题颜色
+    "theme": "blue",           # 主题颜色
+    "enable_animations": True, # 是否启用丝滑动画效果
+    "auto_check_update": True, # 启动时自动检查更新
 }
 
 

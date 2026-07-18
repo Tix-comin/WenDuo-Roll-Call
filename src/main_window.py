@@ -26,10 +26,15 @@ from src.updater import (
     CURRENT_VERSION, launch_installer, get_save_dir
 )
 from src.styles import (
-    PRIMARY, PRIMARY_DARK, PRIMARY_LIGHT, SECONDARY, SECONDARY_DARK,
-    ACCENT, ACCENT_DARK, NEUTRAL, NEUTRAL_LIGHT, WHITE, DANGER,
-    TEXT_PRIMARY, TEXT_SECONDARY, BG_MAIN, GLOBAL_STYLE
+    PRIMARY, PRIMARY_DARK, PRIMARY_LIGHT, PRIMARY_ULTRALIGHT, SECONDARY, SECONDARY_DARK,
+    ACCENT, ACCENT_DARK, NEUTRAL, NEUTRAL_2, NEUTRAL_3, NEUTRAL_4, NEUTRAL_5, NEUTRAL_6,
+    WHITE, DANGER, WARNING,
+    TEXT_PRIMARY, TEXT_SECONDARY, TEXT_TERTIARY, BG_MAIN, GLOBAL_STYLE
 )
+from src.animation_helper import (
+    AnimationManager, bounce_result, fade_in, slide_in, animate_smooth_move
+)
+from src.ios_toggle import IOSToggle
 
 
 def _resolve_asset(rel_path: str) -> str:
@@ -52,31 +57,31 @@ def _resolve_asset(rel_path: str) -> str:
 # ========== 工具组件 ==========
 
 class DisplayCard(QFrame):
-    """中央点名显示卡片 - 带渐变背景和装饰"""
+    """中央点名显示卡片 - Apple风格温润渐变卡片"""
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("displayCard")
-        self.setFixedHeight(180)
+        self.setFixedHeight(200)
         self._current_name = "准备点名"
         self._init_ui()
 
     def _init_ui(self):
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setContentsMargins(24, 20, 24, 20)
         layout.setSpacing(8)
 
         self.title_label = QLabel("准备点名")
         self.title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.title_label.setStyleSheet(
-            "font-size: 52px; font-weight: 900; color: #1E3A8A; background: transparent; letter-spacing: 2px;"
+            "font-size: 56px; font-weight: 700; color: #0051D5; background: transparent; letter-spacing: 2px;"
         )
         self.title_label.setWordWrap(False)
 
         self.sub_label = QLabel("点击下方按钮开始")
         self.sub_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.sub_label.setStyleSheet(
-            "font-size: 14px; color: #64748B; background: transparent;"
+            "font-size: 14px; color: #8E8E93; background: transparent; font-weight: 500;"
         )
 
         layout.addWidget(self.title_label, 1)
@@ -86,14 +91,13 @@ class DisplayCard(QFrame):
         """设置显示文本并自动根据文字长度调整字号"""
         self._current_name = text
         self.title_label.setText(text)
-        # 根据文本长度自适应字号
         n = len(text)
         if n <= 2:
             font_size = 72
         elif n <= 3:
             font_size = 60
         elif n <= 4:
-            font_size = 48
+            font_size = 50
         elif n <= 6:
             font_size = 40
         elif n <= 8:
@@ -101,58 +105,49 @@ class DisplayCard(QFrame):
         else:
             font_size = 26
         self.title_label.setStyleSheet(
-            f"font-size: {font_size}px; font-weight: 900; color: #1E3A8A; background: transparent; letter-spacing: 2px;"
+            f"font-size: {font_size}px; font-weight: 700; color: #0051D5; background: transparent; letter-spacing: 2px;"
         )
 
     def paintEvent(self, event):
-        """自定义绘制渐变背景 + 装饰"""
+        """自定义绘制Apple风格渐变背景 + 装饰元素"""
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
-        # 主渐变背景（蓝白）
+        # 柔和的蓝白渐变
         gradient = QLinearGradient(0, 0, self.width(), self.height())
-        gradient.setColorAt(0, QColor("#EFF6FF"))
-        gradient.setColorAt(0.5, QColor("#DBEAFE"))
+        gradient.setColorAt(0, QColor("#F0F7FF"))
+        gradient.setColorAt(0.4, QColor("#E0F0FF"))
         gradient.setColorAt(1, QColor("#FFFFFF"))
         painter.setBrush(gradient)
         painter.setPen(Qt.PenStyle.NoPen)
-        painter.drawRoundedRect(0, 0, self.width(), self.height(), 16, 16)
+        painter.drawRoundedRect(0, 0, self.width(), self.height(), 20, 20)
 
-        # 装饰小圆点（左上）
+        # 装饰圆（左上，柔和蓝）
         painter.setBrush(QColor(PRIMARY_LIGHT))
-        painter.setOpacity(0.6)
-        painter.drawEllipse(20, 20, 16, 16)
+        painter.setOpacity(0.25)
+        painter.drawEllipse(24, 20, 32, 32)
 
-        # 装饰小菱形（右上）
-        painter.setOpacity(0.8)
-        painter.setBrush(QColor("#FCD34D"))  # 黄色
-        points = [
-            QPoint(self.width() - 50, 30),
-            QPoint(self.width() - 30, 50),
-            QPoint(self.width() - 50, 70),
-            QPoint(self.width() - 70, 50),
-        ]
-        from PyQt6.QtCore import QPointF
-        from PyQt6.QtGui import QPolygonF
-        polygon = QPolygonF([QPointF(p) for p in points])
-        painter.drawPolygon(polygon)
-
-        # 装饰圆形（右下）
+        # 装饰圆（右上，柔和紫）
         painter.setBrush(QColor(ACCENT))
-        painter.setOpacity(0.2)
-        painter.drawEllipse(self.width() - 80, self.height() - 60, 60, 60)
+        painter.setOpacity(0.12)
+        painter.drawEllipse(self.width() - 70, 16, 50, 50)
 
-        # 装饰小方块（左下）
+        # 装饰圆（右下，柔和绿）
         painter.setBrush(QColor(SECONDARY))
-        painter.setOpacity(0.3)
-        painter.drawRect(30, self.height() - 40, 14, 14)
+        painter.setOpacity(0.12)
+        painter.drawEllipse(self.width() - 90, self.height() - 55, 44, 44)
+
+        # 装饰点（左下）
+        painter.setBrush(QColor(WARNING))
+        painter.setOpacity(0.2)
+        painter.drawEllipse(36, self.height() - 36, 18, 18)
 
         painter.setOpacity(1.0)
         painter.end()
         super().paintEvent(event)
 
-    def set_result(self, text: str, sub_text: str, color: str = PRIMARY):
-        """设置结果 - 带弹跳动画"""
+    def set_result(self, text: str, sub_text: str, color: str = PRIMARY_DARK):
+        """设置结果 - 带丝滑弹跳动画"""
         self.title_label.setText(text)
         self.sub_label.setText(sub_text)
         n = len(text)
@@ -161,7 +156,7 @@ class DisplayCard(QFrame):
         elif n <= 3:
             font_size = 60
         elif n <= 4:
-            font_size = 48
+            font_size = 50
         elif n <= 6:
             font_size = 40
         elif n <= 8:
@@ -169,11 +164,11 @@ class DisplayCard(QFrame):
         else:
             font_size = 26
         self.title_label.setStyleSheet(
-            f"font-size: {font_size}px; font-weight: 900; color: {color}; background: transparent; letter-spacing: 2px;"
+            f"font-size: {font_size}px; font-weight: 700; color: {color}; background: transparent; letter-spacing: 2px;"
         )
         self._bounce_animation()
 
-    def set_state(self, text: str = "准备点名", sub: str = "点击下方按钮开始", color: str = "#1E3A8A"):
+    def set_state(self, text: str = "准备点名", sub: str = "点击下方按钮开始", color: str = "#0051D5"):
         """设置静态状态"""
         self.title_label.setText(text)
         self.sub_label.setText(sub)
@@ -183,7 +178,7 @@ class DisplayCard(QFrame):
         elif n <= 3:
             font_size = 60
         elif n <= 4:
-            font_size = 48
+            font_size = 50
         elif n <= 6:
             font_size = 40
         elif n <= 8:
@@ -191,39 +186,41 @@ class DisplayCard(QFrame):
         else:
             font_size = 26
         self.title_label.setStyleSheet(
-            f"font-size: {font_size}px; font-weight: 900; color: {color}; background: transparent; letter-spacing: 2px;"
+            f"font-size: {font_size}px; font-weight: 700; color: {color}; background: transparent; letter-spacing: 2px;"
         )
 
     def set_sub_message(self, message: str):
-        """仅更新副标题文字（用于 Toast 提示）"""
+        """仅更新副标题文字"""
         self.sub_label.setText(message)
         self._fade_in_sub()
 
     def _bounce_animation(self):
-        """弹跳动画"""
-        # 大小缩放动画
+        """弹跳动画 - 遵守全局动画开关"""
+        if not AnimationManager.is_enabled():
+            return
         anim = QPropertyAnimation(self.title_label, b"geometry")
-        anim.setDuration(600)
+        anim.setDuration(550)
         rect = self.title_label.geometry()
         anim.setStartValue(rect)
-        anim.setKeyValueAt(0.3, QRect(rect.x() - 6, rect.y() - 8, rect.width() + 12, rect.height() + 16))
-        anim.setKeyValueAt(0.6, QRect(rect.x() - 3, rect.y() - 4, rect.width() + 6, rect.height() + 8))
+        anim.setKeyValueAt(0.25, QRect(rect.x() - 5, rect.y() - 7, rect.width() + 10, rect.height() + 14))
+        anim.setKeyValueAt(0.55, QRect(rect.x() - 2, rect.y() - 3, rect.width() + 4, rect.height() + 6))
         anim.setEndValue(rect)
         anim.setEasingCurve(QEasingCurve.Type.OutElastic)
         anim.start()
-        # 保持引用
         self._bounce_anim = anim
 
     def _fade_in_sub(self):
         """副标题淡入效果"""
+        if not AnimationManager.is_enabled():
+            return
         effect = self.sub_label.graphicsEffect()
         if effect is None:
             from PyQt6.QtWidgets import QGraphicsOpacityEffect
             effect = QGraphicsOpacityEffect(self.sub_label)
             self.sub_label.setGraphicsEffect(effect)
         anim = QPropertyAnimation(effect, b"opacity")
-        anim.setDuration(220)
-        anim.setStartValue(0.2)
+        anim.setDuration(200)
+        anim.setStartValue(0.3)
         anim.setEndValue(1.0)
         anim.setEasingCurve(QEasingCurve.Type.OutCubic)
         anim.start()
@@ -231,7 +228,7 @@ class DisplayCard(QFrame):
 
 
 class SidebarButton(QPushButton):
-    """侧边栏按钮 - 图标+文字，支持激活态"""
+    """侧边栏按钮 - Apple风格列表按钮"""
 
     def __init__(self, icon: str, text: str, parent=None):
         super().__init__(parent)
@@ -242,7 +239,7 @@ class SidebarButton(QPushButton):
         self.setStyleSheet("""
             QPushButton {
                 background: transparent;
-                color: #64748B;
+                color: #6E6E73;
                 border: none;
                 border-radius: 10px;
                 padding: 8px 16px;
@@ -251,19 +248,19 @@ class SidebarButton(QPushButton):
                 font-weight: 500;
             }
             QPushButton:hover {
-                background-color: #F1F5F9;
-                color: #1E3A8A;
+                background-color: #F2F2F7;
+                color: #1D1D1F;
             }
             QPushButton:checked {
-                background-color: #DBEAFE;
-                color: #1D4ED8;
+                background-color: #E0F0FF;
+                color: #0051D5;
                 font-weight: 600;
             }
         """)
 
 
 class ActionButton(QPushButton):
-    """主操作按钮 - 大尺寸带图标"""
+    """主操作按钮 - Apple风格填充按钮"""
 
     def __init__(self, icon: str, text: str, color: str, parent=None):
         super().__init__(parent)
@@ -276,38 +273,40 @@ class ActionButton(QPushButton):
     def _apply_style(self, color: str):
         self.setStyleSheet(f"""
             QPushButton {{
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                    stop:0 {color}, stop:1 {self._darken(color)});
+                background-color: {color};
                 color: white;
                 border: none;
-                border-radius: 10px;
+                border-radius: 12px;
                 font-size: 15px;
                 font-weight: 600;
             }}
             QPushButton:hover {{
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                    stop:0 {self._lighten(color)}, stop:1 {color});
+                background-color: {self._darken(color)};
             }}
             QPushButton:pressed {{
-                background: {self._darken(color)};
+                background-color: {self._darken2(color)};
+            }}
+            QPushButton:disabled {{
+                background-color: #C7C7CC;
+                color: #FFFFFF;
             }}
         """)
 
     def _darken(self, color: str) -> str:
-        """颜色加深"""
         color_map = {
-            PRIMARY: "#1D4ED8",
-            ACCENT: "#7C3AED",
-            SECONDARY: "#059669",
+            PRIMARY: "#0051D5",
+            ACCENT: "#8944AB",
+            SECONDARY: "#248A3D",
+            DANGER: "#D70015",
         }
         return color_map.get(color, color)
 
-    def _lighten(self, color: str) -> str:
-        """颜色变浅"""
+    def _darken2(self, color: str) -> str:
         color_map = {
-            PRIMARY: "#60A5FA",
-            ACCENT: "#A78BFA",
-            SECONDARY: "#34D399",
+            PRIMARY: "#003F99",
+            ACCENT: "#6B348A",
+            SECONDARY: "#1A6B2E",
+            DANGER: "#A80012",
         }
         return color_map.get(color, color)
 
@@ -434,10 +433,17 @@ class MainWindow(QWidget):
         self._refresh_name_list()
         self._refresh_history_table()
 
+        # 应用动画设置
+        AnimationManager.apply_from_settings(self.settings_manager)
+
         # 数据订阅：当名单/历史/设置变化时，UI自动同步
         self.name_manager.changed.connect(self._on_data_changed)
         self.history_manager.changed.connect(self._on_data_changed)
         self.settings_manager.changed.connect(self._on_settings_changed_external)
+
+        # 启动时自动检查更新（延迟3秒，不影响启动速度）
+        if self.settings_manager.get("auto_check_update", True):
+            QTimer.singleShot(3000, self._silent_check_update)
 
     def _on_data_changed(self):
         """数据（名单/历史）变化：刷新计数显示 + 历史表 + 名单列表"""
@@ -487,7 +493,7 @@ class MainWindow(QWidget):
 
         # 右侧内容区
         right_panel = QWidget()
-        right_panel.setStyleSheet("background-color: #F8FAFC;")
+        right_panel.setStyleSheet(f"background-color: {BG_MAIN};")
         right_layout = QVBoxLayout(right_panel)
         right_layout.setContentsMargins(0, 0, 0, 0)
         right_layout.setSpacing(0)
@@ -624,7 +630,7 @@ class MainWindow(QWidget):
         """
         topbar = QWidget()
         topbar.setFixedHeight(48)
-        topbar.setStyleSheet("background-color: #F8FAFC;")
+        topbar.setStyleSheet(f"background-color: {BG_MAIN};")
 
         layout = QHBoxLayout(topbar)
         layout.setContentsMargins(24, 0, 24, 0)
@@ -655,15 +661,15 @@ class MainWindow(QWidget):
 
         # 中间：主页标题
         self.header_title = QLabel("主页")
-        self.header_title.setStyleSheet("color: #1E293B; font-size: 16px; font-weight: 700;")
+        self.header_title.setStyleSheet(f"color: {TEXT_PRIMARY}; font-size: 16px; font-weight: 700;")
         layout.addWidget(self.header_title)
         layout.addStretch()
 
-        # 右侧：关于按钮
-        self.about_btn = QPushButton("  ℹ  关于")
-        self.about_btn.setFixedHeight(32)
-        self.about_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.about_btn.setStyleSheet("""
+        # 右侧：设置按钮
+        self.settings_btn = QPushButton("  ⚙  设置")
+        self.settings_btn.setFixedHeight(32)
+        self.settings_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.settings_btn.setStyleSheet("""
             QPushButton {
                 background-color: #FFFFFF;
                 color: #475569;
@@ -679,6 +685,14 @@ class MainWindow(QWidget):
                 border: 1px solid #CBD5E1;
             }
         """)
+        self.settings_btn.clicked.connect(self._show_settings_dialog)
+        layout.addWidget(self.settings_btn)
+
+        # 右侧：关于按钮
+        self.about_btn = QPushButton("  ℹ  关于")
+        self.about_btn.setFixedHeight(32)
+        self.about_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.about_btn.setStyleSheet(self.settings_btn.styleSheet())
         self.about_btn.clicked.connect(self._show_about_page)
         layout.addWidget(self.about_btn)
 
@@ -718,7 +732,7 @@ class MainWindow(QWidget):
         """构建左侧栏"""
         sidebar = QWidget()
         sidebar.setFixedWidth(220)
-        sidebar.setStyleSheet("background-color: #FFFFFF; border-right: 1px solid #E2E8F0;")
+        sidebar.setStyleSheet(f"background-color: {WHITE}; border-right: 1px solid {NEUTRAL_5};")
 
         layout = QVBoxLayout(sidebar)
         layout.setContentsMargins(16, 0, 16, 16)
@@ -859,14 +873,14 @@ class MainWindow(QWidget):
             deco.setStyleSheet("font-size: 56px; background: transparent;")
         bottom_layout.addWidget(deco)
 
-        version = QLabel("v1.0.0")
+        version = QLabel(f"v2.0.0")
         version.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        version.setStyleSheet("color: #94A3B8; font-size: 11px; background: transparent;")
+        version.setStyleSheet(f"color: {TEXT_TERTIARY}; font-size: 11px; background: transparent; font-weight: 500;")
         bottom_layout.addWidget(version)
 
         copyright_lbl = QLabel("@2026 Tix comin 开发")
         copyright_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        copyright_lbl.setStyleSheet("color: #CBD5E1; font-size: 10px; background: transparent; letter-spacing: 1px;")
+        copyright_lbl.setStyleSheet(f"color: {NEUTRAL_4}; font-size: 10px; background: transparent; letter-spacing: 1px;")
         bottom_layout.addWidget(copyright_lbl)
 
         layout.addWidget(bottom_widget)
@@ -876,7 +890,7 @@ class MainWindow(QWidget):
     def _build_content_stack(self) -> QWidget:
         """构建内容区 - 包含三个页面"""
         self.stack = QStackedWidget()
-        self.stack.setStyleSheet("background-color: #F8FAFC;")
+        self.stack.setStyleSheet(f"background-color: {BG_MAIN};")
 
         # 三个页面
         self.page_settings = self._build_settings_page()
@@ -1142,6 +1156,34 @@ class MainWindow(QWidget):
 
         sc_layout.addWidget(repeat_widget)
 
+        # 动画效果开关
+        anim_widget = QWidget()
+        anim_widget.setStyleSheet("background: transparent;")
+        anim_layout = QHBoxLayout(anim_widget)
+        anim_layout.setContentsMargins(0, 0, 0, 0)
+        anim_layout.setSpacing(12)
+
+        anim_icon = QLabel("✨")
+        anim_icon.setFixedSize(32, 32)
+        anim_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        anim_icon.setStyleSheet(f"background-color: {PRIMARY_ULTRALIGHT}; color: {PRIMARY}; border-radius: 8px; font-size: 16px;")
+        anim_layout.addWidget(anim_icon)
+
+        anim_label = QLabel("丝滑动画")
+        anim_label.setFixedWidth(80)
+        anim_label.setStyleSheet(f"color: {TEXT_PRIMARY}; font-size: 14px; font-weight: 500;")
+        anim_layout.addWidget(anim_label)
+
+        anim_desc = QLabel("点名弹跳、窗口过渡等效果")
+        anim_desc.setStyleSheet(f"color: {TEXT_SECONDARY}; font-size: 12px;")
+        anim_layout.addWidget(anim_desc, 1)
+
+        self.anim_toggle = IOSToggle(checked=AnimationManager.is_enabled(), on_color=SECONDARY)
+        self.anim_toggle.toggled.connect(self._on_animation_toggle)
+        anim_layout.addWidget(self.anim_toggle)
+
+        sc_layout.addWidget(anim_widget)
+
         # 设置卡片占满剩余空白（stretch=1）
         layout.addWidget(settings_outer, 1)
 
@@ -1187,26 +1229,6 @@ class MainWindow(QWidget):
         """)
         self.clear_history_btn.clicked.connect(self._clear_history)
         bottom_row.addWidget(self.clear_history_btn, 1)
-
-        self.update_btn = QPushButton("  ↻  检查更新")
-        self.update_btn.setFixedHeight(42)
-        self.update_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.update_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #FFFFFF;
-                color: #10B981;
-                border: 1.5px solid #6EE7B7;
-                border-radius: 8px;
-                font-size: 14px;
-                font-weight: 500;
-            }
-            QPushButton:hover {
-                background-color: #ECFDF5;
-                border: 1.5px solid #10B981;
-            }
-        """)
-        self.update_btn.clicked.connect(self._check_for_updates)
-        bottom_row.addWidget(self.update_btn, 1)
 
         layout.addLayout(bottom_row)
 
@@ -2097,6 +2119,25 @@ class MainWindow(QWidget):
     def _on_repeat_change(self, state):
         self.settings_manager.allow_repeat = (state == Qt.CheckState.Checked.value)
 
+    def _on_animation_toggle(self, checked: bool):
+        """动画开关切换"""
+        self.settings_manager.set("enable_animations", checked)
+        AnimationManager.set_enabled(checked)
+        # 同步刷新悬浮球动画
+        try:
+            if hasattr(self, '_floating_ball_ref'):
+                self._floating_ball_ref.refresh_animations()
+        except Exception:
+            pass
+        # 找到NamePickerApp的floating_ball引用来刷新
+        app = QApplication.instance()
+        for w in app.topLevelWidgets():
+            if hasattr(w, 'floating_ball'):
+                try:
+                    w.floating_ball.refresh_animations()
+                except Exception:
+                    pass
+
     def _on_group_range_change(self):
         self.settings_manager.set("group_start", self.group_start_spin.value())
         self.settings_manager.set("group_end", self.group_end_spin.value())
@@ -2165,6 +2206,200 @@ class MainWindow(QWidget):
             else:
                 self.always_top_btn.setText("📍 已置顶")
 
+    def _show_settings_dialog(self):
+        """显示"设置"对话框：动画开关 + 自动更新 + 版本信息 + 检查更新"""
+        if hasattr(self, "_settings_dialog") and self._settings_dialog and self._settings_dialog.isVisible():
+            self._settings_dialog.raise_()
+            self._settings_dialog.activateWindow()
+            return
+
+        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton
+        from PyQt6.QtCore import Qt as _Qt
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle("设置 · 闻铎点名器")
+        dlg.setFixedSize(440, 420)
+        dlg.setStyleSheet(f"background-color: {BG_MAIN};")
+
+        outer = QVBoxLayout(dlg)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+
+        # 顶部导航栏（Apple风格）
+        nav = QWidget()
+        nav.setFixedHeight(50)
+        nav.setStyleSheet(f"background-color: {WHITE}; border-bottom: 1px solid {NEUTRAL_5};")
+        nav_lay = QHBoxLayout(nav)
+        nav_lay.setContentsMargins(20, 0, 20, 0)
+        nav_title = QLabel("设置")
+        nav_title.setStyleSheet(f"font-size: 17px; font-weight: 600; color: {TEXT_PRIMARY}; background: transparent;")
+        nav_lay.addWidget(nav_title)
+        nav_lay.addStretch()
+        outer.addWidget(nav)
+
+        # 内容区
+        content = QWidget()
+        content.setStyleSheet("background: transparent;")
+        c_lay = QVBoxLayout(content)
+        c_lay.setContentsMargins(20, 16, 20, 16)
+        c_lay.setSpacing(12)
+
+        # ---- 动画开关行 ----
+        anim_row = QWidget()
+        anim_row.setStyleSheet(f"background-color: {WHITE}; border-radius: 12px;")
+        ar_lay = QHBoxLayout(anim_row)
+        ar_lay.setContentsMargins(16, 12, 16, 12)
+        ar_lay.setSpacing(12)
+
+        anim_icon = QLabel("✨")
+        anim_icon.setFixedSize(32, 32)
+        anim_icon.setAlignment(_Qt.AlignmentFlag.AlignCenter)
+        anim_icon.setStyleSheet(f"background-color: {PRIMARY_ULTRALIGHT}; border-radius: 8px; font-size: 16px;")
+        ar_lay.addWidget(anim_icon)
+
+        anim_text = QVBoxLayout()
+        anim_text.setSpacing(2)
+        at1 = QLabel("丝滑动画")
+        at1.setStyleSheet(f"font-size: 14px; font-weight: 600; color: {TEXT_PRIMARY}; background: transparent;")
+        at2 = QLabel("点名弹跳、窗口过渡等效果")
+        at2.setStyleSheet(f"font-size: 12px; color: {TEXT_SECONDARY}; background: transparent;")
+        anim_text.addWidget(at1)
+        anim_text.addWidget(at2)
+        ar_lay.addLayout(anim_text, 1)
+
+        dlg_anim_toggle = IOSToggle(
+            checked=self.settings_manager.get("enable_animations", True),
+            on_color=SECONDARY
+        )
+        def _toggle_anim(checked):
+            self.settings_manager.set("enable_animations", checked)
+            AnimationManager.set_enabled(checked)
+            # 同步主页面的开关
+            if hasattr(self, 'anim_toggle') and self.anim_toggle.isChecked() != checked:
+                self.anim_toggle.setChecked(checked, animated=False)
+            # 刷新悬浮球
+            app = QApplication.instance()
+            for w in app.topLevelWidgets():
+                if hasattr(w, 'floating_ball'):
+                    try:
+                        w.floating_ball.refresh_animations()
+                    except Exception:
+                        pass
+        dlg_anim_toggle.toggled.connect(_toggle_anim)
+        ar_lay.addWidget(dlg_anim_toggle)
+        c_lay.addWidget(anim_row)
+
+        # ---- 自动更新开关行 ----
+        update_row = QWidget()
+        update_row.setStyleSheet(f"background-color: {WHITE}; border-radius: 12px;")
+        ur_lay = QHBoxLayout(update_row)
+        ur_lay.setContentsMargins(16, 12, 16, 12)
+        ur_lay.setSpacing(12)
+
+        up_icon = QLabel("↻")
+        up_icon.setFixedSize(32, 32)
+        up_icon.setAlignment(_Qt.AlignmentFlag.AlignCenter)
+        up_icon.setStyleSheet(f"background-color: #FFF3E0; color: {WARNING}; border-radius: 8px; font-size: 16px; font-weight: bold;")
+        ur_lay.addWidget(up_icon)
+
+        up_text = QVBoxLayout()
+        up_text.setSpacing(2)
+        ut1 = QLabel("自动检查更新")
+        ut1.setStyleSheet(f"font-size: 14px; font-weight: 600; color: {TEXT_PRIMARY}; background: transparent;")
+        ut2 = QLabel("启动时自动检查新版本")
+        ut2.setStyleSheet(f"font-size: 12px; color: {TEXT_SECONDARY}; background: transparent;")
+        up_text.addWidget(ut1)
+        up_text.addWidget(ut2)
+        ur_lay.addLayout(up_text, 1)
+
+        dlg_update_toggle = IOSToggle(
+            checked=self.settings_manager.get("auto_check_update", True),
+            on_color=SECONDARY
+        )
+        def _toggle_auto_update(checked):
+            self.settings_manager.set("auto_check_update", checked)
+        dlg_update_toggle.toggled.connect(_toggle_auto_update)
+        ur_lay.addWidget(dlg_update_toggle)
+        c_lay.addWidget(update_row)
+
+        # ---- 版本信息卡片 ----
+        ver_card = QWidget()
+        ver_card.setStyleSheet(f"background-color: {WHITE}; border-radius: 12px;")
+        vr_lay = QVBoxLayout(ver_card)
+        vr_lay.setContentsMargins(16, 14, 16, 14)
+        vr_lay.setSpacing(8)
+
+        ver_row = QHBoxLayout()
+        ver_label = QLabel("当前版本")
+        ver_label.setStyleSheet(f"font-size: 14px; color: {TEXT_SECONDARY}; background: transparent;")
+        ver_row.addWidget(ver_label)
+        ver_row.addStretch()
+        ver_num = QLabel(CURRENT_VERSION)
+        ver_num.setStyleSheet(f"font-size: 14px; font-weight: 600; color: {PRIMARY_DARK}; background: transparent;")
+        ver_row.addWidget(ver_num)
+        vr_lay.addLayout(ver_row)
+
+        # 分隔线
+        sep = QFrame()
+        sep.setFrameShape(QFrame.Shape.HLine)
+        sep.setStyleSheet(f"background-color: {NEUTRAL_5}; max-height: 1px; border: none;")
+        vr_lay.addWidget(sep)
+
+        # 检查更新按钮
+        self._dlg_update_btn = QPushButton("  ↻  检查更新")
+        self._dlg_update_btn.setFixedHeight(38)
+        self._dlg_update_btn.setCursor(_Qt.CursorShape.PointingHandCursor)
+        self._dlg_update_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {PRIMARY_ULTRALIGHT};
+                color: {PRIMARY_DARK};
+                border: none;
+                border-radius: 10px;
+                font-size: 14px;
+                font-weight: 600;
+            }}
+            QPushButton:hover {{
+                background-color: #CCE4FF;
+            }}
+            QPushButton:disabled {{
+                color: {TEXT_TERTIARY};
+                background-color: {NEUTRAL_6};
+            }}
+        """)
+        self._dlg_update_btn.clicked.connect(lambda: self._check_for_updates(self._dlg_update_btn))
+        vr_lay.addWidget(self._dlg_update_btn)
+
+        c_lay.addWidget(ver_card)
+
+        c_lay.addStretch()
+
+        # 关闭按钮
+        btn_row = QHBoxLayout()
+        btn_row.addStretch()
+        close_btn = QPushButton("完成")
+        close_btn.setFixedHeight(36)
+        close_btn.setFixedWidth(100)
+        close_btn.setCursor(_Qt.CursorShape.PointingHandCursor)
+        close_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {PRIMARY};
+                color: #FFFFFF;
+                border-radius: 18px;
+                font-size: 14px;
+                font-weight: 600;
+            }}
+            QPushButton:hover {{ background-color: {PRIMARY_DARK}; }}
+        """)
+        close_btn.clicked.connect(dlg.accept)
+        btn_row.addWidget(close_btn)
+        btn_row.addStretch()
+        c_lay.addLayout(btn_row)
+
+        outer.addWidget(content, 1)
+
+        self._settings_dialog = dlg
+        dlg.exec()
+
     def _show_about_page(self):
         """显示"关于"页面（独立对话框）：
         顶部：打字机效果"中国老师都说好的点名器"
@@ -2191,7 +2426,7 @@ class MainWindow(QWidget):
         # 顶部：标题（打字机效果）
         type_label = QLabel("")
         type_label.setAlignment(_Qt.AlignmentFlag.AlignCenter)
-        type_label.setStyleSheet("font-size: 22px; font-weight: 700; color: #1E3A8A; letter-spacing: 2px;")
+        type_label.setStyleSheet(f"font-size: 22px; font-weight: 700; color: {PRIMARY_DARK}; letter-spacing: 2px;")
         outer.addWidget(type_label)
 
         full_slogan = "中国老师都说好的点名器"
@@ -2299,18 +2534,128 @@ class MainWindow(QWidget):
         default = getattr(self, "_toast_default", "点击下方按钮开始")
         self.display_card.set_sub_message(default)
 
-    def _check_for_updates(self):
+    def _silent_check_update(self):
+        """启动时静默检查更新，有新版本才提示"""
+        self._silent_check_thread = CheckUpdateThread()
+        self._silent_check_thread.finished.connect(self._on_silent_check_finished)
+        self._silent_check_thread.start()
+
+    def _on_silent_check_finished(self, info, error_msg):
+        """静默检查完成回调"""
+        if error_msg or info is None:
+            return  # 静默失败或无新版本，不打扰用户
+
+        # 有新版本，显示友好提示
+        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton
+        from PyQt6.QtCore import Qt as _Qt
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle("发现新版本")
+        dlg.setFixedSize(400, 280)
+        dlg.setStyleSheet(f"background-color: {BG_MAIN};")
+
+        lay = QVBoxLayout(dlg)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(0)
+
+        nav = QWidget()
+        nav.setFixedHeight(50)
+        nav.setStyleSheet(f"background-color: {WHITE}; border-bottom: 1px solid {NEUTRAL_5};")
+        nv = QHBoxLayout(nav)
+        nv.setContentsMargins(20, 0, 20, 0)
+        t = QLabel("发现新版本")
+        t.setStyleSheet(f"font-size: 17px; font-weight: 600; color: {TEXT_PRIMARY}; background: transparent;")
+        nv.addWidget(t)
+        lay.addWidget(nav)
+
+        content = QWidget()
+        content.setStyleSheet("background: transparent;")
+        cl = QVBoxLayout(content)
+        cl.setContentsMargins(24, 20, 24, 20)
+        cl.setSpacing(12)
+
+        ver = QLabel(f"新版本：{info.tag_name}")
+        ver.setStyleSheet(f"font-size: 20px; font-weight: 700; color: {PRIMARY_DARK}; background: transparent;")
+        cl.addWidget(ver)
+
+        cur = QLabel(f"当前版本：{CURRENT_VERSION}")
+        cur.setStyleSheet(f"font-size: 13px; color: {TEXT_SECONDARY}; background: transparent;")
+        cl.addWidget(cur)
+
+        if info.body:
+            # 截取前200字符作为更新说明预览
+            body_preview = info.body[:200] + ("..." if len(info.body) > 200 else "")
+            notes = QLabel(f"更新内容：\n{body_preview}")
+            notes.setWordWrap(True)
+            notes.setStyleSheet(f"font-size: 12px; color: {TEXT_SECONDARY}; background: transparent; line-height: 1.5; padding: 8px; background-color: {WHITE}; border-radius: 8px;")
+            cl.addWidget(notes)
+
+        cl.addStretch()
+
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(10)
+        later_btn = QPushButton("稍后")
+        later_btn.setFixedHeight(36)
+        later_btn.setCursor(_Qt.CursorShape.PointingHandCursor)
+        later_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {NEUTRAL_6};
+                color: {TEXT_PRIMARY};
+                border: none;
+                border-radius: 18px;
+                padding: 0 24px;
+                font-size: 14px;
+                font-weight: 500;
+            }}
+            QPushButton:hover {{ background-color: {NEUTRAL_5}; }}
+        """)
+        later_btn.clicked.connect(dlg.reject)
+
+        update_btn = QPushButton("立即更新")
+        update_btn.setFixedHeight(36)
+        update_btn.setCursor(_Qt.CursorShape.PointingHandCursor)
+        update_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {PRIMARY};
+                color: white;
+                border: none;
+                border-radius: 18px;
+                padding: 0 24px;
+                font-size: 14px;
+                font-weight: 600;
+            }}
+            QPushButton:hover {{ background-color: {PRIMARY_DARK}; }}
+        """)
+        def _do_update():
+            dlg.accept()
+            self._start_download(info)
+        update_btn.clicked.connect(_do_update)
+
+        btn_row.addStretch()
+        btn_row.addWidget(later_btn)
+        btn_row.addWidget(update_btn)
+        cl.addLayout(btn_row)
+
+        lay.addWidget(content, 1)
+        dlg.exec()
+
+    def _check_for_updates(self, button=None):
         """检查更新"""
-        self.update_btn.setEnabled(False)
-        self.update_btn.setText("  ⏳  检查中...")
+        self._update_btn_ref = button
+        if button is not None:
+            button.setEnabled(False)
+            button.setText("  ⏳  检查中...")
 
         self._check_thread = CheckUpdateThread()
         self._check_thread.finished.connect(self._on_check_finished)
         self._check_thread.start()
 
     def _on_check_finished(self, info, error_msg):
-        self.update_btn.setEnabled(True)
-        self.update_btn.setText("  ↻  检查更新")
+        button = getattr(self, "_update_btn_ref", None)
+        if button is not None:
+            button.setEnabled(True)
+            button.setText("  ↻  检查更新")
+        self._update_btn_ref = None
 
         if error_msg:
             QMessageBox.warning(

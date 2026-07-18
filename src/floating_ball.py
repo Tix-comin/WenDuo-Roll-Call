@@ -1,10 +1,11 @@
-'''悬浮球窗口 - 腾讯管家风格：可吸附屏幕边缘、半隐藏、悬停展开
-闻铎点名器 - Floating Ball'''
+'''悬浮球窗口 - Apple风格可吸附屏幕边缘、半隐藏、悬停展开
+闻铎点名器 v2.0.0 - Floating Ball'''
 from PyQt6.QtWidgets import QWidget, QLabel, QVBoxLayout, QApplication
 from PyQt6.QtCore import Qt, QPoint, QTimer, QPropertyAnimation, QEasingCurve, QSize, pyqtSignal, QRect
-from PyQt6.QtGui import QMouseEvent, QFont, QPainter, QColor, QLinearGradient, QPen
+from PyQt6.QtGui import QMouseEvent, QFont, QPainter, QColor, QLinearGradient, QPen, QRadialGradient
 
-from src.styles import PRIMARY, PRIMARY_DARK, WHITE
+from src.styles import PRIMARY, PRIMARY_DARK, PRIMARY_LIGHT, WHITE
+from src.animation_helper import AnimationManager, animate_smooth_move, animate_size, pulse_widget
 
 BALL_SIZE = 56
 BALL_EXPANDED = 64
@@ -51,7 +52,7 @@ class FloatingBall(QWidget):
         self.label = QLabel('闻')
         self.label.setObjectName('ballLabel')
         self.label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.label.setFont(QFont('Microsoft YaHei', 14, QFont.Weight.Bold))
+        self.label.setFont(QFont('PingFang SC', 16, QFont.Weight.DemiBold))
         self.label.setStyleSheet('color: white; background: transparent;')
         layout.addWidget(self.label)
         self.setMouseTracking(True)
@@ -61,34 +62,49 @@ class FloatingBall(QWidget):
             self.move(geo.right() - BALL_SIZE - 8, geo.center().y())
 
     def _setup_animation(self):
-        self._pulse_animation = QPropertyAnimation(self, b'windowOpacity')
-        self._pulse_animation.setDuration(2500)
-        self._pulse_animation.setStartValue(0.80)
-        self._pulse_animation.setKeyValueAt(0.5, 1.0)
-        self._pulse_animation.setEndValue(0.80)
-        self._pulse_animation.setLoopCount(-1)
-        self._pulse_animation.setEasingCurve(QEasingCurve.Type.InOutSine)
-        self._pulse_animation.start()
+        """根据动画开关决定是否启动呼吸动画"""
+        if self._pulse_animation:
+            self._pulse_animation.stop()
+            self._pulse_animation = None
+
+        if AnimationManager.is_enabled():
+            self._pulse_animation = pulse_widget(self, 2800)
+
+    def refresh_animations(self):
+        """设置改变时刷新动画状态"""
+        self._setup_animation()
 
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         w = self.width(); h = self.height(); margin = 2
         side = min(w, h) - margin * 2
-        radius = side * 0.25
+        radius = side * 0.5
+
+        # 阴影
         painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(QColor(0, 0, 0, 30))
-        painter.drawRoundedRect(margin + 3, margin + 3, side, side, radius + 2, radius + 2)
-        gradient = QLinearGradient(0, 0, w, h)
-        gradient.setColorAt(0, QColor('#60A5FA'))
-        gradient.setColorAt(0.5, QColor('#3B82F6'))
-        gradient.setColorAt(1, QColor('#2563EB'))
+        shadow = QRadialGradient(w/2 + 2, h/2 + 4, side/2 + 4)
+        shadow.setColorAt(0, QColor(0, 0, 0, 50))
+        shadow.setColorAt(1, QColor(0, 0, 0, 0))
+        painter.setBrush(shadow)
+        painter.drawEllipse(margin - 2, margin - 1, side + 8, side + 8)
+
+        # 主体渐变
+        gradient = QRadialGradient(w*0.35, h*0.3, side*0.7)
+        gradient.setColorAt(0, QColor('#64D2FF'))
+        gradient.setColorAt(0.5, QColor(PRIMARY))
+        gradient.setColorAt(1, QColor(PRIMARY_DARK))
         painter.setBrush(gradient)
-        painter.setPen(QPen(QColor(255, 255, 255, 80), 2))
-        painter.drawRoundedRect(margin, margin, side, side, radius, radius)
-        painter.setBrush(QColor(255, 255, 255, 50))
         painter.setPen(Qt.PenStyle.NoPen)
-        painter.drawRoundedRect(int(w * 0.15), int(h * 0.12), int(side * 0.35), int(side * 0.2), radius * 0.5, radius * 0.5)
+        painter.drawEllipse(margin, margin, side, side)
+
+        # 高光
+        highlight = QRadialGradient(w*0.3, h*0.25, side*0.35)
+        highlight.setColorAt(0, QColor(255, 255, 255, 120))
+        highlight.setColorAt(1, QColor(255, 255, 255, 0))
+        painter.setBrush(highlight)
+        painter.drawEllipse(margin, margin, side, side)
+
         painter.end()
 
     def _get_screen_rect(self) -> QRect:
@@ -112,7 +128,10 @@ class FloatingBall(QWidget):
             target_x = screen.right() - EDGE_PEEK
             self._snap_side = 'right'
         target_pos = QPoint(target_x, center_y - self.height() // 2)
-        self._animate_move(target_pos, duration=300)
+        if AnimationManager.is_enabled():
+            animate_smooth_move(self, target_pos, duration=320)
+        else:
+            self.move(target_pos)
         self._is_snapped = True
 
     def _expand_from_edge(self):
@@ -126,11 +145,17 @@ class FloatingBall(QWidget):
         else:
             target_x = screen.right() - self.width() - 4
         target_pos = QPoint(target_x, center_y - self.height() // 2)
-        self._animate_move(target_pos, duration=200)
+        if AnimationManager.is_enabled():
+            animate_smooth_move(self, target_pos, duration=220)
+        else:
+            self.move(target_pos)
 
     def _animate_move(self, target: QPoint, duration=300):
         if self._move_anim and self._move_anim.state() == QPropertyAnimation.State.Running:
             self._move_anim.stop()
+        if not AnimationManager.is_enabled():
+            self.move(target)
+            return
         self._move_anim = QPropertyAnimation(self, b'pos')
         self._move_anim.setDuration(duration)
         self._move_anim.setStartValue(self.pos())
@@ -138,9 +163,13 @@ class FloatingBall(QWidget):
         self._move_anim.setEasingCurve(QEasingCurve.Type.OutCubic)
         self._move_anim.start()
 
-    def _animate_size(self, target_size: int, duration=150):
+    def _animate_size(self, target_size: int, duration=180):
         if self._size_anim and self._size_anim.state() == QPropertyAnimation.State.Running:
             self._size_anim.stop()
+        if not AnimationManager.is_enabled():
+            self.setFixedSize(target_size, target_size)
+            self._current_ball_size = target_size
+            return
         self._size_anim = QPropertyAnimation(self, b'size')
         self._size_anim.setDuration(duration)
         self._size_anim.setStartValue(self.size())
@@ -186,12 +215,12 @@ class FloatingBall(QWidget):
         if self._is_snapped:
             self._expand_from_edge()
         if self._current_ball_size < BALL_EXPANDED:
-            self._animate_size(BALL_EXPANDED, 150)
+            self._animate_size(BALL_EXPANDED, 180)
 
     def leaveEvent(self, event):
         self._is_hovering = False
         if self._current_ball_size > BALL_SIZE:
-            self._animate_size(BALL_SIZE, 150)
+            self._animate_size(BALL_SIZE, 180)
         if not self._is_dragging:
             self._snap_timer.start(SNAP_DELAY)
 

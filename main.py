@@ -72,7 +72,8 @@ try:
     from src.floating_ball import FloatingBall
     from src.main_window import MainWindow
     from src.quick_picker_window import QuickPickerWindow
-    from src.data_manager import ensure_data_dir
+    from src.data_manager import ensure_data_dir, SettingsManager
+    from src.animation_helper import AnimationManager
     _log("src modules imports OK")
 except Exception as e:
     _log(f"IMPORT ERROR: {e}")
@@ -91,6 +92,13 @@ class NamePickerApp:
 
         # 确保数据目录存在
         ensure_data_dir()
+
+        # 提前加载设置并初始化动画管理器
+        try:
+            _pre_settings = SettingsManager()
+            AnimationManager.apply_from_settings(_pre_settings)
+        except Exception:
+            pass
 
         # 加载应用图标
         self._load_app_icon()

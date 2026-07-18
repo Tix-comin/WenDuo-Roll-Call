@@ -1,35 +1,43 @@
 """
-UI样式和主题定义
-闻铎点名器 - Styles
+UI样式和主题定义 - Apple风格教育主题
+闻铎点名器 v2.0.0 - Styles
+温润、大方、适合课堂教育场景
 """
 
-# ========== 颜色主题 ==========
-PRIMARY = "#3B82F6"       # 主蓝色
-PRIMARY_DARK = "#2563EB"
-PRIMARY_LIGHT = "#93C5FD"
-SECONDARY = "#10B981"     # 绿色
-SECONDARY_DARK = "#059669"
-ACCENT = "#8B5CF6"        # 紫色
-ACCENT_DARK = "#7C3AED"
-NEUTRAL = "#1F2937"       # 深灰
-NEUTRAL_LIGHT = "#F3F4F6" # 浅灰
+# ========== Apple 教育风配色 ==========
+# 主色：温润的教育蓝（比科技蓝更柔和）
+PRIMARY = "#007AFF"       # Apple Blue
+PRIMARY_DARK = "#0051D5"
+PRIMARY_LIGHT = "#64D2FF"
+PRIMARY_ULTRALIGHT = "#E0F0FF"
+
+# 辅助色：教育友好的活力色
+SECONDARY = "#34C759"     # Apple Green - 积极/成功
+SECONDARY_DARK = "#248A3D"
+ACCENT = "#AF52DE"        # Apple Purple - 创意/活力
+ACCENT_DARK = "#8944AB"
+WARNING = "#FF9500"       # Apple Orange
+DANGER = "#FF3B30"        # Apple Red
+
+# 中性色：温润的灰色系统
+NEUTRAL = "#1D1D1F"       # Apple 深灰文字
+NEUTRAL_2 = "#424245"
+NEUTRAL_3 = "#8E8E93"
+NEUTRAL_4 = "#C7C7CC"
+NEUTRAL_5 = "#E5E5EA"
+NEUTRAL_6 = "#F2F2F7"     # Apple 浅灰背景
+BG_MAIN = "#F5F5F7"       # 温暖的米白背景
 WHITE = "#FFFFFF"
-DANGER = "#EF4444"        # 红色
-WARNING = "#F59E0B"       # 橙色
-TEXT_PRIMARY = "#1F2937"
-TEXT_SECONDARY = "#6B7280"
-TEXT_WHITE = "#FFFFFF"
-BG_MAIN = "#F9FAFB"
 
-# 渐变背景
-GRADIENT_PRIMARY = f"""
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-        stop:0 {PRIMARY}, stop:1 {ACCENT});
-"""
-GRADIENT_BALL = f"""
-    background: qradialgradient(cx:0.35, cy:0.35, radius:0.7,
-        stop:0 #60A5FA, stop:0.5 {PRIMARY}, stop:1 {PRIMARY_DARK});
-"""
+# 文字色
+TEXT_PRIMARY = "#1D1D1F"
+TEXT_SECONDARY = "#6E6E73"
+TEXT_TERTIARY = "#AEAEB2"
+TEXT_WHITE = "#FFFFFF"
+
+# 毛玻璃效果色
+GLASS_BG = "rgba(255, 255, 255, 0.72)"
+GLASS_BORDER = "rgba(255, 255, 255, 0.3)"
 
 # ========== 全局样式表 ==========
 GLOBAL_STYLE = f"""
@@ -38,31 +46,32 @@ QMainWindow {{
     background-color: {BG_MAIN};
 }}
 
-/* 卡片/容器 */
+/* 卡片/容器 - Apple风格圆角卡片 */
 QFrame#card {{
     background-color: {WHITE};
-    border-radius: 12px;
-    border: 1px solid #E5E7EB;
-}}
-
-/* 按钮通用样式 */
-QPushButton {{
-    border-radius: 8px;
-    padding: 8px 16px;
-    font-size: 14px;
-    font-weight: 600;
+    border-radius: 16px;
     border: none;
 }}
 
+/* 按钮通用样式 - Apple 胶囊按钮 */
+QPushButton {{
+    border-radius: 10px;
+    padding: 8px 20px;
+    font-size: 14px;
+    font-weight: 500;
+    border: none;
+    font-family: "SF Pro Display", "PingFang SC", "Microsoft YaHei", sans-serif;
+}}
+
 QPushButton:hover {{
-    filter: brightness(1.1);
+    filter: brightness(1.05);
 }}
 
 QPushButton:pressed {{
-    filter: brightness(0.95);
+    filter: brightness(0.92);
 }}
 
-/* 主按钮 */
+/* 主按钮 - Apple Blue 填充 */
 QPushButton#btnPrimary {{
     background-color: {PRIMARY};
     color: {WHITE};
@@ -96,11 +105,11 @@ QPushButton#btnAccent:hover {{
 QPushButton#btnOutline {{
     background-color: transparent;
     color: {PRIMARY};
-    border: 2px solid {PRIMARY};
+    border: 1.5px solid {PRIMARY};
 }}
 
 QPushButton#btnOutline:hover {{
-    background-color: rgba(59, 130, 246, 0.1);
+    background-color: {PRIMARY_ULTRALIGHT};
 }}
 
 /* 危险按钮 */
@@ -109,93 +118,119 @@ QPushButton#btnDanger {{
     color: {WHITE};
 }}
 
-/* 输入框 */
+/* 输入框 - Apple风格柔和边框 */
 QLineEdit, QSpinBox {{
-    border: 2px solid #D1D5DB;
-    border-radius: 8px;
-    padding: 8px 12px;
+    border: 1px solid {NEUTRAL_5};
+    border-radius: 10px;
+    padding: 8px 14px;
     font-size: 14px;
     background-color: {WHITE};
+    color: {TEXT_PRIMARY};
+    selection-background-color: {PRIMARY_LIGHT};
 }}
 
 QLineEdit:focus, QSpinBox:focus {{
     border-color: {PRIMARY};
+    outline: none;
 }}
 
-/* 滑块 */
+/* 滑块 - Apple风格 */
 QSlider::groove:horizontal {{
-    height: 6px;
-    background-color: #E5E7EB;
-    border-radius: 3px;
+    height: 4px;
+    background-color: {NEUTRAL_5};
+    border-radius: 2px;
 }}
 
 QSlider::handle:horizontal {{
-    width: 18px;
-    height: 18px;
-    margin: -6px 0;
-    background-color: {PRIMARY};
-    border-radius: 9px;
-    border: 2px solid {WHITE};
+    width: 24px;
+    height: 24px;
+    margin: -10px 0;
+    background-color: {WHITE};
+    border-radius: 12px;
+    border: none;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.15), 0 1px 2px rgba(0,0,0,0.1);
 }}
 
 QSlider::handle:horizontal:hover {{
-    background-color: {PRIMARY_DARK};
+    background-color: {PRIMARY_LIGHT};
+    transform: scale(1.1);
 }}
 
 QSlider::sub-page:horizontal {{
     background-color: {PRIMARY};
-    border-radius: 3px;
+    border-radius: 2px;
 }}
 
-/* 滚动条 */
+/* 滚动条 - 极简细条 */
 QScrollBar:vertical {{
-    width: 8px;
+    width: 6px;
     background: transparent;
+    margin: 4px 2px;
 }}
 
 QScrollBar::handle:vertical {{
-    background: #D1D5DB;
-    border-radius: 4px;
+    background: {NEUTRAL_4};
+    border-radius: 3px;
     min-height: 30px;
 }}
 
 QScrollBar::handle:vertical:hover {{
-    background: #9CA3AF;
+    background: {NEUTRAL_3};
 }}
 
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
     height: 0px;
 }}
 
-/* 复选框 */
+QScrollBar:horizontal {{
+    height: 6px;
+    background: transparent;
+}}
+
+QScrollBar::handle:horizontal {{
+    background: {NEUTRAL_4};
+    border-radius: 3px;
+    min-width: 30px;
+}}
+
+/* 复选框 - Apple 风格开关 */
 QCheckBox {{
     font-size: 14px;
     color: {TEXT_PRIMARY};
-    spacing: 8px;
+    spacing: 10px;
+    font-family: "SF Pro Display", "PingFang SC", "Microsoft YaHei", sans-serif;
 }}
 
 QCheckBox::indicator {{
-    width: 18px;
-    height: 18px;
-    border-radius: 4px;
-    border: 2px solid #D1D5DB;
+    width: 20px;
+    height: 20px;
+    border-radius: 6px;
+    border: 1.5px solid {NEUTRAL_4};
+    background-color: {WHITE};
+}}
+
+QCheckBox::indicator:hover {{
+    border-color: {PRIMARY};
 }}
 
 QCheckBox::indicator:checked {{
     background-color: {PRIMARY};
     border-color: {PRIMARY};
+    image: none;
 }}
 
 /* 标签 */
 QLabel#title {{
-    font-size: 20px;
+    font-size: 28px;
     font-weight: 700;
     color: {TEXT_PRIMARY};
+    letter-spacing: -0.5px;
 }}
 
 QLabel#subtitle {{
-    font-size: 14px;
+    font-size: 15px;
     color: {TEXT_SECONDARY};
+    font-weight: 400;
 }}
 
 /* 分组框 */
@@ -203,129 +238,168 @@ QGroupBox {{
     font-size: 14px;
     font-weight: 600;
     color: {TEXT_PRIMARY};
-    border: 1px solid #E5E7EB;
-    border-radius: 8px;
-    margin-top: 12px;
-    padding-top: 20px;
+    border: 1px solid {NEUTRAL_5};
+    border-radius: 12px;
+    margin-top: 16px;
+    padding-top: 24px;
+    background-color: {WHITE};
 }}
 
 QGroupBox::title {{
     subcontrol-origin: margin;
-    left: 12px;
-    padding: 0 8px;
+    left: 16px;
+    padding: 0 10px;
+    color: {TEXT_SECONDARY};
 }}
 
 /* 表格 */
 QTableWidget {{
     border: none;
     background-color: {WHITE};
-    gridline-color: #F3F4F6;
-    font-size: 13px;
+    gridline-color: {NEUTRAL_6};
+    font-size: 14px;
+    font-family: "SF Pro Text", "PingFang SC", "Microsoft YaHei", sans-serif;
 }}
 
 QTableWidget::item {{
-    padding: 6px;
+    padding: 10px 12px;
+    border-bottom: 1px solid {NEUTRAL_6};
+}}
+
+QTableWidget::item:selected {{
+    background-color: {PRIMARY_ULTRALIGHT};
+    color: {PRIMARY_DARK};
 }}
 
 QHeaderView::section {{
-    background-color: {NEUTRAL_LIGHT};
-    padding: 8px;
+    background-color: {NEUTRAL_6};
+    padding: 12px;
     border: none;
     font-weight: 600;
     font-size: 13px;
+    color: {TEXT_SECONDARY};
 }}
 
 /* TabWidget */
 QTabWidget::pane {{
-    border: 1px solid #E5E7EB;
-    border-radius: 8px;
+    border: none;
+    border-radius: 12px;
     background-color: {WHITE};
 }}
 
 QTabBar::tab {{
-    padding: 8px 16px;
-    font-size: 13px;
+    padding: 10px 20px;
+    font-size: 14px;
     font-weight: 500;
     border: none;
-    border-bottom: 2px solid transparent;
     color: {TEXT_SECONDARY};
+    background: transparent;
 }}
 
 QTabBar::tab:selected {{
     color: {PRIMARY};
     border-bottom: 2px solid {PRIMARY};
+    font-weight: 600;
 }}
 
 QTabBar::tab:hover {{
     color: {PRIMARY};
 }}
+
+/* 进度条 */
+QProgressBar {{
+    border: none;
+    border-radius: 6px;
+    background-color: {NEUTRAL_6};
+    height: 8px;
+    text-align: center;
+}}
+
+QProgressBar::chunk {{
+    background-color: {PRIMARY};
+    border-radius: 6px;
+}}
+
+/* 滚动区域 */
+QScrollArea {{
+    border: none;
+    background: transparent;
+}}
+
+/* 消息框 */
+QMessageBox {{
+    background-color: {WHITE};
+}}
 """
 
-# 悬浮球样式
+# 悬浮球样式 - Apple风格活力球
 FLOATING_BALL_STYLE = f"""
 QWidget#floatingBall {{
-    background: qradialgradient(cx:0.35, cy:0.35, radius:0.7,
-        stop:0 #60A5FA, stop:0.4 {PRIMARY}, stop:1 #1D4ED8);
+    background: qradialgradient(cx:0.3, cy:0.3, radius:0.8,
+        stop:0 #64D2FF, stop:0.4 {PRIMARY}, stop:1 {PRIMARY_DARK});
     border-radius: 30px;
-    border: 2px solid rgba(255, 255, 255, 0.3);
+    border: none;
 }}
 
 QWidget#floatingBall:hover {{
-    border: 2px solid rgba(255, 255, 255, 0.6);
+    background: qradialgradient(cx:0.3, cy:0.3, radius:0.8,
+        stop:0 #80DEFF, stop:0.4 #34A7FF, stop:1 {PRIMARY});
 }}
 
 QLabel#ballLabel {{
     color: white;
     font-size: 18px;
-    font-weight: bold;
+    font-weight: 600;
     background: transparent;
 }}
 """
 
-# 点名显示区域样式
+# 点名显示区域样式 - Apple风格大卡片
 DISPLAY_AREA_STYLE = f"""
 QFrame#displayArea {{
-    background-color: {NEUTRAL_LIGHT};
-    border-radius: 12px;
-    border: 2px solid #E5E7EB;
+    background-color: {WHITE};
+    border-radius: 20px;
+    border: none;
 }}
 
 QLabel#displayLabel {{
-    font-size: 48px;
-    font-weight: 800;
-    color: {NEUTRAL};
+    font-size: 56px;
+    font-weight: 700;
+    color: {PRIMARY_DARK};
     background: transparent;
+    letter-spacing: 2px;
 }}
 """
 
-# 名单标签样式
+# 名单标签样式 - Apple 胶囊标签
 NAME_TAG_STYLE = f"""
 QFrame#nameTag {{
-    background-color: rgba(59, 130, 246, 0.1);
-    border-radius: 16px;
-    padding: 4px 12px;
+    background-color: {PRIMARY_ULTRALIGHT};
+    border-radius: 20px;
+    padding: 6px 14px;
 }}
 
 QLabel#nameTagLabel {{
-    color: {PRIMARY};
-    font-size: 13px;
+    color: {PRIMARY_DARK};
+    font-size: 14px;
     font-weight: 500;
 }}
 
 QPushButton#nameTagClose {{
     background: transparent;
-    color: rgba(59, 130, 246, 0.6);
-    font-size: 12px;
+    color: {PRIMARY_LIGHT};
+    font-size: 14px;
     padding: 0px;
-    border-radius: 8px;
-    min-width: 16px;
-    max-width: 16px;
-    min-height: 16px;
-    max-height: 16px;
+    border-radius: 10px;
+    min-width: 20px;
+    max-width: 20px;
+    min-height: 20px;
+    max-height: 20px;
 }}
 
 QPushButton#nameTagClose:hover {{
     color: {DANGER};
+    background-color: rgba(255, 59, 48, 0.1);
 }}
 """
 
@@ -333,27 +407,69 @@ QPushButton#nameTagClose:hover {{
 HISTORY_ITEM_STYLE = f"""
 QFrame#historyItem {{
     background-color: {WHITE};
-    border-radius: 8px;
-    border: 1px solid #E5E7EB;
-    padding: 8px;
+    border-radius: 12px;
+    border: none;
+    padding: 12px;
 }}
 
 QLabel#historyTime {{
-    color: {TEXT_SECONDARY};
-    font-size: 11px;
+    color: {TEXT_TERTIARY};
+    font-size: 12px;
 }}
 
 QLabel#historyResult {{
     color: {TEXT_PRIMARY};
-    font-size: 14px;
+    font-size: 15px;
     font-weight: 600;
 }}
 
 QLabel#historyType {{
     color: {PRIMARY};
     font-size: 11px;
-    background-color: rgba(59, 130, 246, 0.1);
-    border-radius: 4px;
-    padding: 2px 6px;
+    background-color: {PRIMARY_ULTRALIGHT};
+    border-radius: 6px;
+    padding: 3px 8px;
+    font-weight: 500;
+}}
+"""
+
+# 侧边栏样式
+SIDEBAR_STYLE = f"""
+QWidget#sidebar {{
+    background-color: {WHITE};
+    border-right: 1px solid {NEUTRAL_5};
+}}
+"""
+
+# 设置开关样式（iOS风格UISwitch模拟）
+TOGGLE_ON_STYLE = f"""
+QPushButton {{
+    background-color: {SECONDARY};
+    border-radius: 15px;
+    min-width: 50px;
+    max-width: 50px;
+    min-height: 30px;
+    max-height: 30px;
+    text-align: left;
+    padding-left: 4px;
+    color: white;
+    font-size: 16px;
+    font-weight: bold;
+}}
+"""
+
+TOGGLE_OFF_STYLE = f"""
+QPushButton {{
+    background-color: {NEUTRAL_4};
+    border-radius: 15px;
+    min-width: 50px;
+    max-width: 50px;
+    min-height: 30px;
+    max-height: 30px;
+    text-align: right;
+    padding-right: 4px;
+    color: white;
+    font-size: 16px;
+    font-weight: bold;
 }}
 """

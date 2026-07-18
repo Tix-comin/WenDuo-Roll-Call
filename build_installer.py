@@ -85,9 +85,15 @@ shutil.copy(os.path.join(ROOT, "assets", "app_icon.ico"),
 
 # 写入 README
 with open(os.path.join(payload_stage, "readme.txt"), "w", encoding="utf-8") as f:
-    f.write("闻铎点名器 v1.0.0\n")
+    f.write("闻铎点名器 v2.0.0\n")
     f.write("开发者: Tix comin\n")
     f.write("联系邮箱: dwlxjztz@qq.com\n")
+    f.write("\n更新日志 v2.0.0:\n")
+    f.write("- 全新Apple风格UI，更适合教育场景\n")
+    f.write("- 新增丝滑动画系统，支持全局开关\n")
+    f.write("- 启动时自动检查更新\n")
+    f.write("- 安装时可选择是否默认开启动画\n")
+    f.write("- 优化点名弹跳、窗口过渡等动画效果\n")
 
 # 打包 payload.zip（安装器会把这个一起打包进 exe）
 payload_zip = os.path.join(ROOT, "payload.zip")

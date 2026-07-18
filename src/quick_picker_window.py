@@ -26,12 +26,24 @@ try:
     from src.data_manager import NameListManager, HistoryManager, SettingsManager
     from src.picker_engine import PickerEngine
     from src.tts_engine import TTSEngine
-    from src.styles import PRIMARY, PRIMARY_DARK, ACCENT, SECONDARY, NEUTRAL, DANGER, WHITE
+    from src.styles import (
+        PRIMARY, PRIMARY_DARK, PRIMARY_LIGHT, PRIMARY_ULTRALIGHT,
+        SECONDARY, SECONDARY_DARK, ACCENT, ACCENT_DARK,
+        NEUTRAL, NEUTRAL_3, NEUTRAL_4, NEUTRAL_5, NEUTRAL_6,
+        WHITE, DANGER, WARNING, BG_MAIN, TEXT_PRIMARY, TEXT_SECONDARY
+    )
+    from src.animation_helper import AnimationManager, bounce_result
 except ImportError:
     from data_manager import NameListManager, HistoryManager, SettingsManager
     from picker_engine import PickerEngine
     from tts_engine import TTSEngine
-    from styles import PRIMARY, PRIMARY_DARK, ACCENT, SECONDARY, NEUTRAL, DANGER, WHITE
+    from styles import (
+        PRIMARY, PRIMARY_DARK, PRIMARY_LIGHT, PRIMARY_ULTRALIGHT,
+        SECONDARY, SECONDARY_DARK, ACCENT, ACCENT_DARK,
+        NEUTRAL, NEUTRAL_3, NEUTRAL_4, NEUTRAL_5, NEUTRAL_6,
+        WHITE, DANGER, WARNING, BG_MAIN, TEXT_PRIMARY, TEXT_SECONDARY
+    )
+    from animation_helper import AnimationManager, bounce_result
 
 
 class QuickPickerWindow(QWidget):
@@ -110,16 +122,15 @@ class QuickPickerWindow(QWidget):
             }}
         """)
 
-        # ========== 顶部栏（渐变蓝） ==========
+        # ========== 顶部栏（Apple风格渐变蓝） ==========
         top_bar = QFrame(container)
         top_bar.setGeometry(0, 0, self.WINDOW_WIDTH, 48)
-        top_bar.setStyleSheet("""
-            QFrame {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                    stop:0 #3B82F6, stop:1 #2563EB);
+        top_bar.setStyleSheet(f"""
+            QFrame {{
+                background-color: {PRIMARY};
                 border-top-left-radius: 20px;
                 border-top-right-radius: 20px;
-            }
+            }}
         """)
         # 整个顶部栏可点击打开主面板（拖动逻辑保留）
         top_bar.mousePressEvent = self._top_bar_press
@@ -214,14 +225,13 @@ class QuickPickerWindow(QWidget):
         self.display_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.display_label.setStyleSheet(f"""
             QLabel {{
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 #DBEAFE, stop:1 #EFF6FF);
+                background-color: {PRIMARY_ULTRALIGHT};
                 color: {PRIMARY_DARK};
-                border-radius: 16px;
+                border-radius: 20px;
                 font-size: 56px;
-                font-weight: 900;
+                font-weight: 700;
                 letter-spacing: 4px;
-                border: 2px solid #BFDBFE;
+                border: none;
             }}
         """)
 
@@ -229,8 +239,8 @@ class QuickPickerWindow(QWidget):
         self.sub_label = QLabel("点击下方按钮开始随机抽取", container)
         self.sub_label.setGeometry(24, 238, self.WINDOW_WIDTH - 48, 22)
         self.sub_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.sub_label.setStyleSheet("""
-            color: #64748B;
+        self.sub_label.setStyleSheet(f"""
+            color: {TEXT_SECONDARY};
             font-size: 12px;
             font-weight: 500;
             background: transparent;
@@ -242,11 +252,10 @@ class QuickPickerWindow(QWidget):
         self.count_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.count_label.setStyleSheet(f"""
             QLabel {{
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                    stop:0 #60A5FA, stop:1 #3B82F6);
+                background-color: {PRIMARY};
                 color: white;
                 font-size: 12px;
-                font-weight: 700;
+                font-weight: 600;
                 border-radius: 14px;
                 padding: 4px 12px;
             }}
@@ -271,16 +280,15 @@ class QuickPickerWindow(QWidget):
         self.batch_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.batch_btn.setStyleSheet(f"""
             QPushButton {{
-                background-color: #F5F3FF;
-                color: {ACCENT};
-                border: 1.5px solid #DDD6FE;
+                background-color: #F5F0FF;
+                color: {ACCENT_DARK};
+                border: none;
                 border-radius: 10px;
                 font-size: 14px;
-                font-weight: 700;
+                font-weight: 600;
             }}
             QPushButton:hover {{
-                background-color: #EDE9FE;
-                border: 1.5px solid #C4B5FD;
+                background-color: #EDE5FF;
             }}
             QPushButton:pressed {{
                 background-color: #DDD6FE;
@@ -295,15 +303,14 @@ class QuickPickerWindow(QWidget):
         self.group_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: #ECFDF5;
-                color: {SECONDARY};
-                border: 1.5px solid #A7F3D0;
+                color: {SECONDARY_DARK};
+                border: none;
                 border-radius: 10px;
                 font-size: 14px;
-                font-weight: 700;
+                font-weight: 600;
             }}
             QPushButton:hover {{
                 background-color: #D1FAE5;
-                border: 1.5px solid #6EE7B7;
             }}
             QPushButton:pressed {{
                 background-color: #A7F3D0;
@@ -317,19 +324,18 @@ class QuickPickerWindow(QWidget):
         self.like_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.like_btn.setStyleSheet(f"""
             QPushButton {{
-                background-color: #FEE2E2;
-                color: #B91C1C;
-                border: 1.5px solid #FCA5A5;
+                background-color: #FFF0F0;
+                color: #D70015;
+                border: none;
                 border-radius: 10px;
                 font-size: 14px;
-                font-weight: 700;
+                font-weight: 600;
             }}
             QPushButton:hover {{
-                background-color: #FECACA;
-                border: 1.5px solid #F87171;
+                background-color: #FFE0E0;
             }}
             QPushButton:pressed {{
-                background-color: #FCA5A5;
+                background-color: #FFCCCC;
             }}
         """)
         self.like_btn.clicked.connect(self._on_like)
@@ -409,41 +415,35 @@ class QuickPickerWindow(QWidget):
         if rolling:
             self.start_btn.setStyleSheet(f"""
                 QPushButton {{
-                    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                        stop:0 #EF4444, stop:1 #DC2626);
+                    background-color: {DANGER};
                     color: white;
                     border: none;
                     border-radius: 12px;
                     font-size: 17px;
-                    font-weight: 700;
+                    font-weight: 600;
                 }}
                 QPushButton:hover {{
-                    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                        stop:0 #F87171, stop:1 #DC2626);
+                    background-color: #D70015;
                 }}
                 QPushButton:pressed {{
-                    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                        stop:0 #B91C1C, stop:1 #7F1D1D);
+                    background-color: #A80012;
                 }}
             """)
         else:
             self.start_btn.setStyleSheet(f"""
                 QPushButton {{
-                    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                        stop:0 {PRIMARY}, stop:1 {PRIMARY_DARK});
+                    background-color: {PRIMARY};
                     color: white;
                     border: none;
                     border-radius: 12px;
                     font-size: 17px;
-                    font-weight: 700;
+                    font-weight: 600;
                 }}
                 QPushButton:hover {{
-                    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                        stop:0 #60A5FA, stop:1 {PRIMARY});
+                    background-color: {PRIMARY_DARK};
                 }}
                 QPushButton:pressed {{
-                    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                        stop:0 {PRIMARY_DARK}, stop:1 #1E3A8A);
+                    background-color: #003F99;
                 }}
             """)
 
@@ -496,14 +496,13 @@ class QuickPickerWindow(QWidget):
             self.display_label.setText(name)
             self.display_label.setStyleSheet(f"""
                 QLabel {{
-                    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                        stop:0 #DBEAFE, stop:1 #EFF6FF);
+                    background-color: {PRIMARY_ULTRALIGHT};
                     color: {NEUTRAL};
-                    border-radius: 16px;
+                    border-radius: 20px;
                     font-size: 56px;
-                    font-weight: 900;
+                    font-weight: 700;
                     letter-spacing: 4px;
-                    border: 2px solid #BFDBFE;
+                    border: none;
                 }}
             """)
         else:
@@ -558,19 +557,18 @@ class QuickPickerWindow(QWidget):
         self.batch_btn.setText("⏹ 停止朗读")
         self.batch_btn.setStyleSheet(f"""
             QPushButton {{
-                background-color: #FEF2F2;
-                color: #DC2626;
-                border: 1.5px solid #FCA5A5;
+                background-color: #FFF0F0;
+                color: #D70015;
+                border: none;
                 border-radius: 10px;
                 font-size: 14px;
-                font-weight: 700;
+                font-weight: 600;
             }}
             QPushButton:hover {{
-                background-color: #FEE2E2;
-                border: 1.5px solid #F87171;
+                background-color: #FFE0E0;
             }}
             QPushButton:pressed {{
-                background-color: #FECACA;
+                background-color: #FFCCCC;
             }}
         """)
         self._speak_next_batch()
@@ -606,16 +604,15 @@ class QuickPickerWindow(QWidget):
         self.batch_btn.setText("📋 批量")
         self.batch_btn.setStyleSheet(f"""
             QPushButton {{
-                background-color: #F5F3FF;
-                color: {ACCENT};
-                border: 1.5px solid #DDD6FE;
+                background-color: #F5F0FF;
+                color: {ACCENT_DARK};
+                border: none;
                 border-radius: 10px;
                 font-size: 14px;
-                font-weight: 700;
+                font-weight: 600;
             }}
             QPushButton:hover {{
-                background-color: #EDE9FE;
-                border: 1.5px solid #C4B5FD;
+                background-color: #EDE5FF;
             }}
             QPushButton:pressed {{
                 background-color: #DDD6FE;
@@ -651,19 +648,18 @@ class QuickPickerWindow(QWidget):
         self.like_btn.setText("🗑 清除历史")
         self.like_btn.setStyleSheet(f"""
             QPushButton {{
-                background-color: #FEE2E2;
-                color: #B91C1C;
-                border: 1.5px solid #FCA5A5;
+                background-color: #FFF0F0;
+                color: #D70015;
+                border: none;
                 border-radius: 10px;
                 font-size: 14px;
-                font-weight: 700;
+                font-weight: 600;
             }}
             QPushButton:hover {{
-                background-color: #FECACA;
-                border: 1.5px solid #F87171;
+                background-color: #FFE0E0;
             }}
             QPushButton:pressed {{
-                background-color: #FCA5A5;
+                background-color: #FFCCCC;
             }}
         """)
 
@@ -727,7 +723,6 @@ class QuickPickerWindow(QWidget):
 
     def _set_result(self, text: str, sub: str, color: str, big: bool = True, small_text: bool = False):
         self.display_label.setText(text)
-        # 根据内容长度自适应字号（big=True 最大，small_text 适合多人名单）
         if small_text:
             font_size = 26
         elif len(text) > 6:
@@ -738,17 +733,19 @@ class QuickPickerWindow(QWidget):
             font_size = 56
         self.display_label.setStyleSheet(f"""
             QLabel {{
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 #DBEAFE, stop:1 #EFF6FF);
+                background-color: {PRIMARY_ULTRALIGHT};
                 color: {color};
-                border-radius: 16px;
+                border-radius: 20px;
                 font-size: {font_size}px;
-                font-weight: 900;
+                font-weight: 700;
                 letter-spacing: 3px;
-                border: 2px solid #BFDBFE;
+                border: none;
             }}
         """)
         self.sub_label.setText(sub)
+        # 结果弹跳动画
+        if AnimationManager.is_enabled():
+            bounce_result(self.display_label, scale_factor=1.05, duration=500)
 
     def _show_message(self, message: str):
         self.sub_label.setText(message)

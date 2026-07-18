@@ -37,7 +37,7 @@ else:
 APP_NAME = "闻铎点名器"
 APP_EXE = "闻铎点名器.exe"
 UNINSTALL_EXE = "uninstall.exe"
-APP_VERSION = "1.0.0"
+APP_VERSION = "2.0.0"
 APP_PUBLISHER = "Tix comin"
 CONTACT_EMAIL = "dwlxjztz@qq.com"
 
@@ -145,10 +145,11 @@ def write_uninstall_registry(install_dir, exe_size):
 class InstallWorker:
     """实际安装逻辑（可在后台线程运行）"""
 
-    def __init__(self, install_dir, create_desktop=True, create_startmenu=True):
+    def __init__(self, install_dir, create_desktop=True, create_startmenu=True, enable_animations=True):
         self.install_dir = install_dir
         self.create_desktop = create_desktop
         self.create_startmenu = create_startmenu
+        self.enable_animations = enable_animations
 
     def run(self, progress_callback=None, log_callback=None):
         def log(msg):
@@ -221,6 +222,35 @@ class InstallWorker:
                     prog(pct)
         prog(70)
         log(f"✓ 已解压 {total} 个文件")
+
+        # 2.5 写入初始设置（包含动画开关默认值）
+        try:
+            import json
+            data_dir = os.path.join(self.install_dir, "data")
+            os.makedirs(data_dir, exist_ok=True)
+            settings_path = os.path.join(data_dir, "settings.json")
+            if not os.path.exists(settings_path):
+                initial_settings = {
+                    "speed": 10,
+                    "stop_time": 1.25,
+                    "group_stop_time": 1.25,
+                    "group_start": 1,
+                    "group_end": 9,
+                    "batch_count": 5,
+                    "allow_repeat": False,
+                    "group_repeat": False,
+                    "theme": "blue",
+                    "enable_animations": self.enable_animations,
+                    "auto_check_update": True,
+                }
+                with open(settings_path, "w", encoding="utf-8") as sf:
+                    json.dump(initial_settings, sf, ensure_ascii=False, indent=2)
+                log(f"✓ 已写入初始设置（动画{'开启' if self.enable_animations else '关闭'}）")
+            else:
+                log("✓ 设置文件已存在，保留用户配置")
+        except Exception as e:
+            log(f"⚠ 写入初始设置失败（不影响使用）: {e}")
+        prog(73)
 
         # 计算主程序大小
         main_exe = os.path.join(self.install_dir, APP_EXE)
@@ -390,6 +420,15 @@ class InstallerWindow(QWidget):
         root.addWidget(self.cb_desktop)
         root.addWidget(self.cb_startmenu)
 
+        # ---- 动画效果选项 ----
+        self.cb_animations = QCheckBox("启用丝滑动画效果（推荐）")
+        self.cb_animations.setChecked(True)
+        self.cb_animations.setStyleSheet(
+            "color: #334155; font-size: 13px; padding: 4px 0;"
+        )
+        self.cb_animations.setToolTip("开启后将享受点名弹跳、窗口过渡等丝滑动画效果")
+        root.addWidget(self.cb_animations)
+
         # ---- 进度条 ----
         self.progress = QProgressBar()
         self.progress.setRange(0, 100)
@@ -533,6 +572,7 @@ class InstallerWindow(QWidget):
             install_dir=install_dir,
             create_desktop=self.cb_desktop.isChecked(),
             create_startmenu=self.cb_startmenu.isChecked(),
+            enable_animations=self.cb_animations.isChecked(),
         )
         self._thread = InstallThread(worker)
         self._thread.progress.connect(self.progress.setValue)
