@@ -18,8 +18,8 @@ except ImportError:
 
 CURRENT_VERSION = "v1.0.0"
 
-GITHUB_OWNER = "Tixcomin"
-GITHUB_REPO = "WenDuoPicker"
+GITHUB_OWNER = "Tix-comin"
+GITHUB_REPO = "WenDuo-Roll-Call"
 
 CHECK_URLS = [
     f"https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/releases/latest",
