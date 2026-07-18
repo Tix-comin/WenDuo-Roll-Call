@@ -40,6 +40,6 @@ shutil.copyfile(src, dst)
 print("installer:", f"{os.path.getsize(dst) / 1024 / 1024:.2f} MB")
 
 # 同步一份带版本号的命名，方便分卷上传
-dst2 = os.path.join(DIST, "WenDuo-Roll-Call-Setup-v2.0.0.exe")
+dst2 = os.path.join(DIST, "WenDuo-Roll-Call-Setup-v3.0.0.exe")
 shutil.copyfile(dst, dst2)
 print("done")

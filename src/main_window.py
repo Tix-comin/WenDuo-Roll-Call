@@ -878,7 +878,7 @@ class MainWindow(QWidget):
             deco.setStyleSheet("font-size: 40px; color: #3B82F6; background: transparent;")
         bottom_layout.addWidget(deco)
 
-        version = QLabel(f"v2.0.0")
+        version = QLabel(f"v3.0.0")
         version.setAlignment(Qt.AlignmentFlag.AlignCenter)
         version.setStyleSheet(f"color: {TEXT_TERTIARY}; font-size: 11px; background: transparent; font-weight: 500;")
         bottom_layout.addWidget(version)

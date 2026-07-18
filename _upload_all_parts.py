@@ -7,8 +7,8 @@ import requests
 TOKEN = "60102a8720deeb7a15418f41d3004519"
 OWNER = "dawalixijie"
 REPO = "WenDuo-Roll-Call"
-RELEASE_ID = "752031"
-SRC = r"d:\桌面\点名器\dist-install\WenDuo-Roll-Call-Setup-v2.0.0.exe"
+RELEASE_ID = "752160"
+SRC = r"d:\桌面\点名器\dist-install\WenDuo-Roll-Call-Setup-v3.0.0.exe"
 CHUNK_SIZE = 30 * 1024 * 1024
 MAX_RETRIES = 10
 

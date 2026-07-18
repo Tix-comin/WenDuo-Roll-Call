@@ -1,5 +1,5 @@
 '''悬浮球窗口 - Apple风格可吸附屏幕边缘、半隐藏、悬停展开
-闻铎点名器 v2.0.0 - Floating Ball'''
+闻铎点名器 v3.0.0 - Floating Ball'''
 from PyQt6.QtWidgets import QWidget, QLabel, QVBoxLayout, QApplication
 from PyQt6.QtCore import Qt, QPoint, QTimer, QPropertyAnimation, QEasingCurve, QSize, pyqtSignal, QRect
 from PyQt6.QtGui import QMouseEvent, QFont, QPainter, QColor, QLinearGradient, QPen, QRadialGradient

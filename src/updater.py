@@ -18,7 +18,7 @@ try:
 except ImportError:
     urllib = None
 
-CURRENT_VERSION = "v2.0.0"
+CURRENT_VERSION = "v3.0.0"
 
 GITHUB_OWNER = "Tix-comin"
 GITHUB_REPO = "WenDuo-Roll-Call"
@@ -190,7 +190,7 @@ class CheckUpdateThread(QThread):
             with urllib.request.urlopen(req, timeout=15) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
                 assets = data.get("assets", [])
-                # 安装包文件名含 .exe，分卷名不含 .exe，例如 Setup-v2.0.0.part001
+                # 安装包文件名含 .exe，分卷名不含 .exe，例如 Setup-v3.0.0.part001
                 base_filename = os.path.splitext(filename)[0]
                 pattern = re.escape(base_filename) + r"\.part\d{3}$"
                 matched = sorted(
