@@ -2750,7 +2750,7 @@ class MainWindow(QWidget):
         btn_row.addWidget(self._cancel_download_btn)
         dlg_layout.addLayout(btn_row)
 
-        self._download_thread = DownloadThread(info.download_url, save_path)
+        self._download_thread = DownloadThread(info.download_urls, save_path)
         self._download_thread.progress.connect(self._on_download_progress)
         self._download_thread.speed.connect(self._on_download_speed)
         self._download_thread.finished.connect(self._on_download_finished)

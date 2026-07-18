@@ -21,6 +21,11 @@ CURRENT_VERSION = "v2.0.0"
 GITHUB_OWNER = "Tix-comin"
 GITHUB_REPO = "WenDuo-Roll-Call"
 
+# 可选：Gitee 分流仓库（国内下载更快）。
+# 若未配置（为空字符串），则只使用 GitHub 下载源。
+GITEE_OWNER = ""
+GITEE_REPO = ""
+
 # 安装包命名规则：WenDuo-Roll-Call-Setup-{tag}.exe
 INSTALLER_NAME_TEMPLATE = "WenDuo-Roll-Call-Setup-{tag}.exe"
 
@@ -34,22 +39,43 @@ CHECK_URLS = [
     f"https://ghproxy.com/https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/releases/latest",
 ]
 
-DOWNLOAD_MIRRORS = [
-    "",
-    "https://ghproxy.com/",
-    "https://gh-proxy.com/",
-    "https://mirror.ghproxy.com/",
+# 下载源模板：生成多个候选 URL，程序会依次尝试，优先使用靠前的源。
+# 占位符：{tag}, {filename}
+DOWNLOAD_SOURCES = [
+    # GitHub 官方 Releases（海外用户或全局代理时最快）
+    f"https://github.com/{GITHUB_OWNER}/{GITHUB_REPO}/releases/download/{{tag}}/{{filename}}",
+    # 部分 ghproxy 镜像对 release-assets 有一定加速效果
+    f"https://gh-proxy.com/https://github.com/{GITHUB_OWNER}/{GITHUB_REPO}/releases/download/{{tag}}/{{filename}}",
+    f"https://mirror.ghproxy.com/https://github.com/{GITHUB_OWNER}/{GITHUB_REPO}/releases/download/{{tag}}/{{filename}}",
 ]
+
+# 若配置了 Gitee 仓库，插入到最前面作为国内优先源
+if GITEE_OWNER and GITEE_REPO:
+    DOWNLOAD_SOURCES.insert(
+        0,
+        f"https://gitee.com/{GITEE_OWNER}/{GITEE_REPO}/releases/download/{{tag}}/{{filename}}",
+    )
 
 
 class UpdateInfo:
-    def __init__(self, tag_name: str, name: str, body: str, download_url: str, filename: str, size: int = 0):
+    def __init__(
+        self,
+        tag_name: str,
+        name: str,
+        body: str,
+        download_url: str,
+        filename: str,
+        size: int = 0,
+        download_urls: Optional[list] = None,
+    ):
         self.tag_name = tag_name
         self.name = name
         self.body = body
         self.download_url = download_url
         self.filename = filename
         self.size = size
+        # 多个候选下载源，优先使用第一个可用的
+        self.download_urls = download_urls or [download_url]
 
 
 class CheckUpdateThread(QThread):
@@ -120,17 +146,20 @@ class CheckUpdateThread(QThread):
                             pass
 
                     filename = INSTALLER_NAME_TEMPLATE.format(tag=tag_name)
-                    download_url = (
-                        f"{download_url_base}/releases/download/{tag_name}/{filename}"
-                    )
+                    download_urls = [
+                        src.format(tag=tag_name, filename=filename)
+                        for src in DOWNLOAD_SOURCES
+                    ]
+                    primary_url = download_urls[0]
 
                     return UpdateInfo(
                         tag_name=tag_name,
                         name=f"闻铎点名器 {tag_name}",
                         body=release_body,
-                        download_url=download_url,
+                        download_url=primary_url,
                         filename=filename,
                         size=0,
+                        download_urls=download_urls,
                     )
             except Exception as e:
                 last_error = e
@@ -170,71 +199,91 @@ class DownloadThread(QThread):
     failed = pyqtSignal(str)
     cancelled = pyqtSignal()
 
-    def __init__(self, download_url: str, save_path: str):
+    def __init__(self, download_url, save_path: str):
         super().__init__()
-        self.download_url = download_url
+        # 支持单个 URL 字符串或 URL 列表；列表会按顺序尝试
+        if isinstance(download_url, (list, tuple)):
+            self.download_urls = list(download_url)
+        else:
+            self.download_urls = [download_url]
         self.save_path = save_path
         self._cancel = False
 
     def cancel(self):
         self._cancel = True
 
+    # 下载速度保护：若 8 秒内下载不足 64KB，认为该节点过慢，切换到下一个镜像
+    _SLOW_CHECK_INTERVAL = 8.0
+    _SLOW_MIN_BYTES = 64 * 1024
+
     def run(self):
         temp_path = self.save_path + ".part"
-        downloaded = 0
-        if os.path.exists(temp_path):
-            downloaded = os.path.getsize(temp_path)
-
         last_error = None
-        for mirror in DOWNLOAD_MIRRORS:
+
+        for url in self.download_urls:
             if self._cancel:
                 self.cancelled.emit()
                 return
+
+            # 每个源独立从头下载，避免不同源的 Range 续传混乱
+            if os.path.exists(temp_path):
+                try:
+                    os.remove(temp_path)
+                except Exception:
+                    pass
+            downloaded = 0
+
             try:
-                url = mirror + self.download_url if mirror else self.download_url
                 req = urllib.request.Request(
                     url,
                     headers={
                         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                        "Accept": "*/*",
                     }
                 )
 
-                if downloaded > 0:
-                    req.add_header("Range", f"bytes={downloaded}-")
-
+                # 30 秒超时；慢速节点会在速度检测中被提前放弃
                 with urllib.request.urlopen(req, timeout=30) as resp:
                     total = int(resp.headers.get("Content-Length", 0))
-                    if resp.status == 206:
-                        total += downloaded
-                    else:
-                        downloaded = 0
-                        if os.path.exists(temp_path):
-                            os.remove(temp_path)
 
-                    mode = "ab" if downloaded > 0 else "wb"
                     start_time = time.time()
                     last_emit = 0
                     bytes_since_last = 0
+                    slow_check_start = start_time
+                    slow_check_bytes = 0
 
-                    with open(temp_path, mode) as f:
+                    with open(temp_path, "wb") as f:
                         while True:
                             if self._cancel:
                                 self.cancelled.emit()
                                 return
-                            chunk = resp.read(8192)
+                            chunk = resp.read(65536)
                             if not chunk:
                                 break
                             f.write(chunk)
                             downloaded += len(chunk)
                             bytes_since_last += len(chunk)
+                            slow_check_bytes += len(chunk)
+
                             now = time.time()
-                            if now - last_emit > 0.2:
+
+                            # 慢速检测：8 秒不足 64KB 则换源
+                            if now - slow_check_start >= self._SLOW_CHECK_INTERVAL:
+                                if slow_check_bytes < self._SLOW_MIN_BYTES:
+                                    raise Exception(
+                                        f"节点过慢: {url[:60]}... "
+                                        f"({slow_check_bytes / 1024:.1f} KB / {self._SLOW_CHECK_INTERVAL:.0f}s)"
+                                    )
+                                slow_check_start = now
+                                slow_check_bytes = 0
+
+                            # 进度刷新
+                            if now - last_emit > 0.3:
                                 if total > 0:
                                     pct = int(downloaded * 100 / total)
-                                    elapsed = now - start_time
-                                    spd = bytes_since_last / (now - last_emit) if now - last_emit > 0 else 0
-                                    self.progress.emit(pct)
-                                    self.speed.emit(spd)
+                                    self.progress.emit(min(pct, 99))
+                                spd = bytes_since_last / (now - last_emit) if now - last_emit > 0 else 0
+                                self.speed.emit(spd)
                                 last_emit = now
                                 bytes_since_last = 0
 
@@ -244,7 +293,7 @@ class DownloadThread(QThread):
                     os.rename(temp_path, self.save_path)
 
                 self.progress.emit(100)
-                self.finished.emit(self.save_path, self.download_url)
+                self.finished.emit(self.save_path, url)
                 return
             except Exception as e:
                 last_error = e
