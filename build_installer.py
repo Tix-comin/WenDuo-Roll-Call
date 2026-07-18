@@ -83,15 +83,21 @@ os.makedirs(os.path.join(payload_stage, "assets"), exist_ok=True)
 shutil.copy(os.path.join(ROOT, "assets", "app_icon.ico"),
             os.path.join(payload_stage, "assets", "app_icon.ico"))
 
+APP_VERSION = "3.0.2"
+INSTALLER_NAME = f"WenDuo-Roll-Call-Setup-v{APP_VERSION}.exe"
+
 # 写入 README
 with open(os.path.join(payload_stage, "readme.txt"), "w", encoding="utf-8") as f:
-    f.write("闻铎点名器 v3.0.1\n")
+    f.write(f"闻铎点名器 v{APP_VERSION}\n")
     f.write("开发者: Tix comin\n")
-    f.write("联系邮箱: dwlxjztz@qq.com\n")
-    f.write("\n更新日志 v3.0.1:\n")
-    f.write("- 去掉 emoji/中文图标，统一使用英文首字母色块\n")
-    f.write("- 设置页改为与主界面同尺寸的新界面\n")
-    f.write("- 优化检查更新速度（API 节点优先并发请求）\n")
+    f.write("联系邮箱: dwlxjjtz@qq.com\n")
+    f.write(f"\n更新日志 v{APP_VERSION}:\n")
+    f.write("- 统一使用 Lucide SVG 线性图标，移除 emoji/中文图标\n")
+    f.write("- 设置页改为与主界面同尺寸、不可移动、位置同步的新界面\n")
+    f.write("- 修复检查更新误报失败的问题，区分已是最新与全部节点失败\n")
+    f.write("- 启动时自动静默下载更新，完成后提示重启并提供重启按钮\n")
+    f.write("- 更新安装默认使用现有安装目录，无需再次选择路径\n")
+    f.write("- 安装程序支持 /SILENT /DIR /WAITPID /LAUNCH 静默更新参数\n")
     f.write("- 统一 Apple 设计规范，单一蓝色强调\n")
 
 # 打包 payload.zip（安装器会把这个一起打包进 exe）
@@ -117,7 +123,7 @@ run_pyinstaller(
 
 # ---------- 4. 整理输出 ----------
 final_installer = os.path.join(ROOT, "dist", "闻铎点名器 安装程序.exe")
-out_path = os.path.join(DIST, "闻铎点名器 安装程序.exe")
+out_path = os.path.join(DIST, INSTALLER_NAME)
 if os.path.exists(out_path):
     os.remove(out_path)
 shutil.copy(final_installer, out_path)

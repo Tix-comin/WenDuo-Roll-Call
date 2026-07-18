@@ -5,8 +5,12 @@ import json
 import time
 import tempfile
 import subprocess
+import threading
+import shutil
+import re
 from typing import Optional, Tuple
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
 
 from PyQt6.QtCore import QThread, pyqtSignal, QObject, QTimer
 
@@ -17,37 +21,62 @@ try:
 except ImportError:
     urllib = None
 
-CURRENT_VERSION = "v3.0.1"
+CURRENT_VERSION = "v3.0.2"
 
 GITHUB_OWNER = "Tix-comin"
 GITHUB_REPO = "WenDuo-Roll-Call"
 
 # 可选：Gitee 分流仓库（国内下载更快）。
-# 若未配置（为空字符串），则只使用 GitHub 下载源。
 GITEE_OWNER = "dawalixijie"
 GITEE_REPO = "WenDuo-Roll-Call"
 
 # 安装包命名规则：WenDuo-Roll-Call-Setup-{tag}.exe
 INSTALLER_NAME_TEMPLATE = "WenDuo-Roll-Call-Setup-{tag}.exe"
 
-# 检查更新并发请求多个节点，优先使用返回 JSON 的 API 端点（通常最快）。
-# 第 1 批：API 直连 + 两个 API 镜像；第 2 批：releases/latest 重定向 + 镜像。
-CHECK_URLS = [
-    f"https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/releases/latest",
-    f"https://ghproxy.com/https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/releases/latest",
-    f"https://gh-proxy.com/https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/releases/latest",
-    f"https://github.com/{GITHUB_OWNER}/{GITHUB_REPO}/releases/latest",
-    f"https://ghproxy.com/https://github.com/{GITHUB_OWNER}/{GITHUB_REPO}/releases/latest",
-    f"https://gh-proxy.com/https://github.com/{GITHUB_OWNER}/{GITHUB_REPO}/releases/latest",
-]
+APP_NAME = "闻铎点名器"
+REGISTRY_UNINSTALL_KEY = r"Software\Microsoft\Windows\CurrentVersion\Uninstall\{}".format(APP_NAME)
+
+
+def _build_check_urls():
+    """构建检查更新 URL 列表。
+    国内优先 Gitee API；海外或代理可用 GitHub API；并附加 ghproxy 镜像。
+    """
+    urls = []
+    # 1) Gitee Release API（国内通常最快最稳）
+    if GITEE_OWNER and GITEE_REPO:
+        urls.append(
+            f"https://gitee.com/api/v5/repos/{GITEE_OWNER}/{GITEE_REPO}/releases/latest"
+        )
+    # 2) GitHub API 直连
+    urls.append(
+        f"https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/releases/latest"
+    )
+    # 3) GitHub API 镜像
+    urls.append(
+        f"https://ghproxy.com/https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/releases/latest"
+    )
+    urls.append(
+        f"https://gh-proxy.com/https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/releases/latest"
+    )
+    # 4) GitHub releases/latest 重定向页 + 镜像
+    urls.append(f"https://github.com/{GITHUB_OWNER}/{GITHUB_REPO}/releases/latest")
+    urls.append(
+        f"https://ghproxy.com/https://github.com/{GITHUB_OWNER}/{GITHUB_REPO}/releases/latest"
+    )
+    urls.append(
+        f"https://gh-proxy.com/https://github.com/{GITHUB_OWNER}/{GITHUB_REPO}/releases/latest"
+    )
+    return urls
+
+
+CHECK_URLS = _build_check_urls()
 
 # 下载源模板：生成多个候选 URL，程序会依次尝试，优先使用靠前的源。
 # 占位符：{tag}, {filename}
-# 完整安装包下载源（Gitee 由于大文件上传限制采用分卷，这里只保留 GitHub 源）
 DOWNLOAD_SOURCES = [
-    # GitHub 官方 Releases（海外用户或全局代理时最快）
+    # GitHub 官方 Releases
     f"https://github.com/{GITHUB_OWNER}/{GITHUB_REPO}/releases/download/{{tag}}/{{filename}}",
-    # 部分 ghproxy 镜像对 release-assets 有一定加速效果
+    # ghproxy 镜像
     f"https://gh-proxy.com/https://github.com/{GITHUB_OWNER}/{GITHUB_REPO}/releases/download/{{tag}}/{{filename}}",
     f"https://mirror.ghproxy.com/https://github.com/{GITHUB_OWNER}/{GITHUB_REPO}/releases/download/{{tag}}/{{filename}}",
 ]
@@ -77,6 +106,26 @@ class UpdateInfo:
         self.parts_urls = parts_urls or []
 
 
+def is_newer_version(latest: str, current: str) -> bool:
+    """比较两个版本号，latest 是否比 current 新。"""
+
+    def parse_version(v: str) -> Tuple[int, ...]:
+        v = v.lstrip("v")
+        parts = []
+        for p in v.split("."):
+            try:
+                parts.append(int(p))
+            except ValueError:
+                m = re.match(r"(\d+)", p)
+                if m:
+                    parts.append(int(m.group(1)))
+        while len(parts) < 3:
+            parts.append(0)
+        return tuple(parts[:3])
+
+    return parse_version(latest) > parse_version(current)
+
+
 class CheckUpdateThread(QThread):
     finished = pyqtSignal(object, str)
 
@@ -89,23 +138,44 @@ class CheckUpdateThread(QThread):
 
     def _check_update(self) -> Optional[UpdateInfo]:
         """并发检查更新，多个 URL 同时请求，取最快返回的有效结果。"""
-        # 优先并发请求 API 节点（通常最快），失败再请求重定向节点
-        primary_urls = CHECK_URLS[:3]
-        fallback_urls = CHECK_URLS[3:]
+        # 第一批：API 端点（Gitee + GitHub + 镜像），通常最快
+        primary_urls = [u for u in CHECK_URLS if "/api/" in u]
+        # 第二批：重定向页面
+        fallback_urls = [u for u in CHECK_URLS if "/api/" not in u]
 
-        result = self._try_check_urls(primary_urls)
-        if result is not None:
-            return result
+        info, got_no_update, errors = self._try_check_urls(primary_urls)
+        if info is not None:
+            return info
+        if got_no_update:
+            # 已有节点明确返回当前已是最新，无需再试 fallback
+            return None
 
-        result = self._try_check_urls(fallback_urls)
-        if result is not None:
-            return result
+        info, got_no_update, errors2 = self._try_check_urls(fallback_urls)
+        errors.update(errors2)
+        if info is not None:
+            return info
+        if got_no_update:
+            return None
 
-        raise Exception("检查更新失败: 所有节点均无响应或无法解析版本")
+        # 全部失败：汇总错误信息
+        err_summary = "\n".join(
+            f"  {url}: {err}" for url, err in list(errors.items())[:3]
+        )
+        raise Exception(
+            "检查更新失败: 所有节点均无响应或无法解析版本\n" + err_summary
+        )
 
-    def _try_check_urls(self, urls: list) -> Optional[UpdateInfo]:
-        """并发请求一组 URL，返回第一个可用的 UpdateInfo；全部失败返回 None。"""
+    def _try_check_urls(self, urls: list) -> Tuple[Optional[UpdateInfo], bool, dict]:
+        """并发请求一组 URL。
+        返回 (UpdateInfo, got_no_update, errors)。
+        - UpdateInfo: 第一个成功发现的新版本；无则为 None。
+        - got_no_update: 是否有节点返回当前已是最新。
+        - errors: 各失败 URL 的错误信息。
+        """
+        if not urls:
+            return None, False, {}
         errors = {}
+        got_no_update = False
 
         def fetch(url: str):
             try:
@@ -116,44 +186,38 @@ class CheckUpdateThread(QThread):
                         "Accept": "application/json",
                     },
                 )
-                with urllib.request.urlopen(req, timeout=8) as resp:
+                with urllib.request.urlopen(req, timeout=12) as resp:
                     final_url = resp.geturl()
-                    tag_name = self._extract_tag_from_url(final_url)
+                    raw = resp.read()
+                    data = None
+                    tag_name = ""
                     release_body = ""
 
-                    if "api.github.com" in url:
-                        data = json.loads(resp.read().decode("utf-8"))
-                        tag_name = data.get("tag_name", tag_name or "")
+                    # 优先尝试按 JSON 解析
+                    try:
+                        text = raw.decode("utf-8")
+                        if text.strip():
+                            data = json.loads(text)
+                    except Exception:
+                        data = None
+
+                    if data and isinstance(data, dict):
+                        tag_name = data.get("tag_name", "")
                         release_body = data.get("body", "") or ""
-                    elif not tag_name:
-                        try:
-                            ct = resp.headers.get("Content-Type", "")
-                            if "json" in ct:
-                                data = json.loads(resp.read().decode("utf-8"))
-                                tag_name = data.get("tag_name", "")
-                                release_body = data.get("body", "") or ""
-                        except Exception:
-                            pass
+
+                    # 没有 tag_name 时从重定向 URL 提取
+                    if not tag_name:
+                        tag_name = self._extract_tag_from_url(final_url)
 
                     if not tag_name:
                         raise Exception("无法解析版本号")
 
-                    if not self._is_newer(tag_name, CURRENT_VERSION):
+                    if not is_newer_version(tag_name, CURRENT_VERSION):
                         return ("no_update", None)
 
-                    # 获取 release notes
+                    # 获取 release notes（如果之前没拿到 body）
                     if not release_body:
-                        try:
-                            api_url = f"https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/releases/tags/{tag_name}"
-                            req2 = urllib.request.Request(api_url, headers={
-                                "User-Agent": "Mozilla/5.0",
-                                "Accept": "application/json",
-                            })
-                            with urllib.request.urlopen(req2, timeout=8) as resp2:
-                                d2 = json.loads(resp2.read().decode("utf-8"))
-                                release_body = d2.get("body", "") or ""
-                        except Exception:
-                            pass
+                        release_body = self._fetch_release_body(tag_name)
 
                     filename = INSTALLER_NAME_TEMPLATE.format(tag=tag_name)
                     download_urls = [
@@ -177,26 +241,56 @@ class CheckUpdateThread(QThread):
             except Exception as e:
                 return ("error", (url, str(e)))
 
-        with ThreadPoolExecutor(max_workers=min(len(urls), 4)) as executor:
+        with ThreadPoolExecutor(max_workers=min(len(urls), 5)) as executor:
             futures = {executor.submit(fetch, url): url for url in urls}
             for future in as_completed(futures):
                 status, payload = future.result()
                 if status == "no_update":
-                    return None
-                if status == "has_update":
-                    return payload
-                if status == "error":
+                    got_no_update = True
+                elif status == "has_update":
+                    return payload, False, errors
+                elif status == "error":
                     url, err = payload
                     errors[url] = err
 
-        return None
+        return None, got_no_update, errors
+
+    def _fetch_release_body(self, tag_name: str) -> str:
+        """尝试从 GitHub/Gitee API 获取 release body。"""
+        urls = []
+        if GITEE_OWNER and GITEE_REPO:
+            urls.append(
+                f"https://gitee.com/api/v5/repos/{GITEE_OWNER}/{GITEE_REPO}/releases/tags/{tag_name}"
+            )
+        urls.append(
+            f"https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/releases/tags/{tag_name}"
+        )
+        urls.append(
+            f"https://gh-proxy.com/https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/releases/tags/{tag_name}"
+        )
+        for url in urls:
+            try:
+                req = urllib.request.Request(
+                    url,
+                    headers={
+                        "User-Agent": "Mozilla/5.0",
+                        "Accept": "application/json",
+                    },
+                )
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    d = json.loads(resp.read().decode("utf-8"))
+                    body = d.get("body", "") or ""
+                    if body:
+                        return body
+            except Exception:
+                continue
+        return ""
 
     def _get_gitee_parts(self, tag_name: str, filename: str) -> Tuple[list, int]:
         """从 Gitee Release 获取分卷下载 URL 列表与总大小，失败返回 ([], 0)。"""
         if not GITEE_OWNER or not GITEE_REPO:
             return [], 0
         try:
-            import re
             api_url = (
                 f"https://gitee.com/api/v5/repos/{GITEE_OWNER}/{GITEE_REPO}/"
                 f"releases/tags/{tag_name}"
@@ -230,28 +324,8 @@ class CheckUpdateThread(QThread):
 
     def _extract_tag_from_url(self, url: str) -> str:
         """从 releases/tag/vX.Y.Z 形式的 URL 中提取 tag 名。"""
-        import re
         match = re.search(r"/releases/tag/([^/?#]+)", url)
         return match.group(1) if match else ""
-
-    def _is_newer(self, latest: str, current: str) -> bool:
-        def parse_version(v: str) -> Tuple[int, ...]:
-            v = v.lstrip("v")
-            parts = []
-            for p in v.split("."):
-                try:
-                    parts.append(int(p))
-                except ValueError:
-                    import re
-                    m = re.match(r"(\d+)", p)
-                    if m:
-                        parts.append(int(m.group(1)))
-            while len(parts) < 3:
-                parts.append(0)
-            return tuple(parts[:3])
-
-        return parse_version(latest) > parse_version(current)
-
 
 class DownloadThread(QThread):
     progress = pyqtSignal(int)
@@ -567,16 +641,111 @@ class DownloadPartsThread(QThread):
                 pass
 
 
-def launch_installer(installer_path: str):
+def get_save_dir() -> str:
+    return os.path.join(tempfile.gettempdir(), "WenDuoPicker")
+
+
+def get_state_file() -> str:
+    """保存更新状态（已下载的更新包路径等）的文件。"""
+    return os.path.join(get_save_dir(), "update_state.json")
+
+
+def load_update_state() -> dict:
+    """读取已下载更新的状态。"""
+    path = get_state_file()
+    if not os.path.exists(path):
+        return {}
     try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def save_update_state(state: dict):
+    """保存更新状态。"""
+    os.makedirs(get_save_dir(), exist_ok=True)
+    try:
+        with open(get_state_file(), "w", encoding="utf-8") as f:
+            json.dump(state, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+
+
+def clear_update_state():
+    """清除更新状态。"""
+    try:
+        if os.path.exists(get_state_file()):
+            os.remove(get_state_file())
+    except Exception:
+        pass
+
+
+def get_existing_install_dir() -> Optional[str]:
+    """从注册表读取已安装目录；未安装或读取失败返回 None。"""
+    try:
+        import winreg
+        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, REGISTRY_UNINSTALL_KEY)
+        value, _ = winreg.QueryValueEx(key, "InstallLocation")
+        winreg.CloseKey(key)
+        if value and os.path.isdir(value):
+            return value
+    except Exception:
+        pass
+
+    # 兜底：尝试从当前运行路径推断
+    if getattr(sys, "frozen", False):
+        exe_dir = os.path.dirname(sys.executable)
+        # 如果当前 exe 在已知安装目录中
+        if os.path.exists(os.path.join(exe_dir, "闻铎点名器.exe")):
+            return exe_dir
+    return None
+
+
+def launch_installer(
+    installer_path: str,
+    install_dir: Optional[str] = None,
+    silent: bool = False,
+    wait_pid: Optional[int] = None,
+    launch: bool = False,
+):
+    """启动安装程序。
+    install_dir 非空时作为 /DIR 参数传入，让安装器直接覆盖安装到该目录。
+    silent=True 时以静默模式运行，不显示安装界面。
+    wait_pid 非空时安装程序会先等待该进程结束后再开始安装（用于热更新）。
+    launch=True 时安装完成后自动启动应用。
+    """
+    try:
+        cmd = [installer_path]
+        if silent:
+            cmd.append("/SILENT")
+        if install_dir:
+            cmd.append(f"/DIR={install_dir}")
+        if wait_pid:
+            cmd.append(f"/WAITPID={wait_pid}")
+        if launch:
+            cmd.append("/LAUNCH")
         subprocess.Popen(
-            [installer_path],
-            shell=True,
+            cmd,
+            shell=False,
             cwd=os.path.dirname(installer_path) or os.getcwd(),
         )
     except Exception as e:
         raise Exception(f"启动安装程序失败: {e}")
 
 
-def get_save_dir() -> str:
-    return os.path.join(tempfile.gettempdir(), "WenDuoPicker")
+def restart_application():
+    """重启当前应用程序。"""
+    try:
+        if getattr(sys, "frozen", False):
+            exe = sys.executable
+        else:
+            exe = sys.executable
+            # 源码运行时重启 main.py
+            main_py = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "main.py")
+            if os.path.exists(main_py):
+                subprocess.Popen([exe, main_py])
+                return
+        subprocess.Popen([exe])
+    except Exception as e:
+        raise Exception(f"重启失败: {e}")

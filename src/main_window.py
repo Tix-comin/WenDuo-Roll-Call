@@ -23,8 +23,10 @@ from src.picker_engine import PickerEngine
 from src.tts_engine import TTSEngine
 from src.updater import (
     CheckUpdateThread, DownloadThread, DownloadPartsThread, UpdateInfo,
-    CURRENT_VERSION, launch_installer, get_save_dir
+    CURRENT_VERSION, launch_installer, get_save_dir, get_existing_install_dir,
+    load_update_state, save_update_state, clear_update_state, is_newer_version
 )
+from src.icons import icon_label, render_icon
 from src.styles import (
     PRIMARY, PRIMARY_DARK, PRIMARY_LIGHT, PRIMARY_ULTRALIGHT, SECONDARY, SECONDARY_DARK,
     ACCENT, ACCENT_DARK, NEUTRAL, NEUTRAL_2, NEUTRAL_3, NEUTRAL_4, NEUTRAL_5, NEUTRAL_6,
@@ -228,9 +230,9 @@ class DisplayCard(QFrame):
 
 
 class SidebarButton(QPushButton):
-    """侧边栏按钮 - Apple风格列表按钮，左侧带英文首字母色块"""
+    """侧边栏按钮 - Apple风格列表按钮，左侧带 Lucide SVG 图标"""
 
-    def __init__(self, icon: str, text: str, parent=None):
+    def __init__(self, icon_name: str, text: str, parent=None):
         super().__init__(parent)
         self.setCheckable(True)
         self.setFixedHeight(44)
@@ -240,18 +242,11 @@ class SidebarButton(QPushButton):
         layout.setContentsMargins(12, 0, 16, 0)
         layout.setSpacing(10)
 
-        # 左侧英文首字母色块
-        self.icon_label = QLabel(icon)
-        self.icon_label.setFixedSize(26, 26)
-        self.icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.icon_label.setStyleSheet(f"""
-            background-color: {PRIMARY_ULTRALIGHT};
-            color: {PRIMARY};
-            border-radius: 7px;
-            font-size: 12px;
-            font-weight: 700;
-            font-family: "SF Pro Display", "PingFang SC", "Microsoft YaHei", sans-serif;
-        """)
+        # 左侧 Lucide SVG 图标（带淡蓝底色圆角容器）
+        self.icon_label = icon_label(
+            icon_name, size=26, color=PRIMARY, bg_color=PRIMARY_ULTRALIGHT,
+            radius=7, parent=self
+        )
 
         self.text_label = QLabel(text)
         self.text_label.setStyleSheet("""
@@ -277,9 +272,6 @@ class SidebarButton(QPushButton):
             QPushButton:hover {{
                 background-color: #F2F2F7;
             }}
-            QPushButton:hover QLabel {{
-                color: #1D1D1F;
-            }}
             QPushButton:checked {{
                 background-color: {PRIMARY_ULTRALIGHT};
             }}
@@ -291,15 +283,45 @@ class SidebarButton(QPushButton):
 
 
 class ActionButton(QPushButton):
-    """主操作按钮 - Apple风格填充按钮"""
+    """主操作按钮 - Apple风格填充按钮（支持左侧 Lucide SVG 图标）"""
 
-    def __init__(self, icon: str, text: str, color: str, parent=None):
+    def __init__(self, icon_name: str, text: str, color: str, parent=None):
         super().__init__(parent)
-        self.setText(text)
+        self._color = color
         self.setFixedHeight(48)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._color = color
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(6)
+        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        self._icon_lbl = None
+        if icon_name:
+            self._icon_lbl = icon_label(
+                icon_name, size=20, color="#FFFFFF", bg_color=None,
+                radius=0, parent=self
+            )
+            layout.addWidget(self._icon_lbl)
+
+        self._text_lbl = QLabel(text)
+        self._text_lbl.setStyleSheet(
+            "color: #FFFFFF; background: transparent; font-size: 15px; font-weight: 600;"
+        )
+        layout.addWidget(self._text_lbl)
+
         self._apply_style(color)
+
+    def setText(self, text: str):
+        if getattr(self, "_text_lbl", None) is not None:
+            self._text_lbl.setText(text)
+        else:
+            super().setText(text)
+
+    def text(self) -> str:
+        if getattr(self, "_text_lbl", None) is not None:
+            return self._text_lbl.text()
+        return super().text()
 
     def _apply_style(self, color: str):
         self.setStyleSheet(f"""
@@ -399,34 +421,27 @@ class NameTagWidget(QFrame):
 
 
 class SettingsRow(QFrame):
-    """设置行 - 图标 + 标签 + 控件"""
+    """设置行 - SVG 图标 + 标签 + 控件"""
 
-    def __init__(self, icon: str, label: str, widget: QWidget, parent=None):
+    def __init__(self, icon_name: str, label: str, widget: QWidget, parent=None):
         super().__init__(parent)
         self.setStyleSheet("background: transparent;")
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 4, 0, 4)
         layout.setSpacing(12)
 
-        # 左侧圆形色块（首字母）
-        initial = label[0] if label else ""
-        icon_label = QLabel(initial)
-        icon_label.setFixedSize(28, 28)
-        icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        icon_label.setStyleSheet(f"""
-            background-color: #EFF6FF;
-            color: {PRIMARY};
-            border-radius: 8px;
-            font-size: 13px;
-            font-weight: 700;
-        """)
+        # 左侧 Lucide SVG 图标（淡蓝圆角容器）
+        ico = icon_label(
+            icon_name, size=28, color=PRIMARY, bg_color="#EFF6FF",
+            radius=8, parent=self
+        )
 
         # 标签
         text_label = QLabel(label)
         text_label.setFixedWidth(80)
         text_label.setStyleSheet("color: #334155; font-size: 14px; font-weight: 500;")
 
-        layout.addWidget(icon_label)
+        layout.addWidget(ico)
         layout.addWidget(text_label)
         layout.addWidget(widget, 1)
 
@@ -474,9 +489,10 @@ class MainWindow(QWidget):
         self.history_manager.changed.connect(self._on_data_changed)
         self.settings_manager.changed.connect(self._on_settings_changed_external)
 
-        # 启动时自动检查更新（延迟3秒，不影响启动速度）
+        # 启动时：若已有下载好的更新包，先提示重启；否则延迟检查更新
+        QTimer.singleShot(800, self._check_pending_update_on_startup)
         if self.settings_manager.get("auto_check_update", True):
-            QTimer.singleShot(3000, self._silent_check_update)
+            QTimer.singleShot(3500, self._silent_check_update)
 
     def _on_data_changed(self):
         """数据（名单/历史）变化：刷新计数显示 + 历史表 + 名单列表"""
@@ -554,8 +570,8 @@ class MainWindow(QWidget):
         layout.setContentsMargins(14, 0, 6, 0)
         layout.setSpacing(10)
 
-        # 图标：品牌英文首字母 W
-        icon_lbl = self._make_icon_badge("W", size=28)
+        # 图标：应用图标（SVG/ICO 优先，缺失时回退字母）
+        icon_lbl = self._make_app_icon_label(size=28)
         layout.addWidget(icon_lbl)
 
         # 应用名
@@ -667,8 +683,8 @@ class MainWindow(QWidget):
         layout.setContentsMargins(24, 0, 24, 0)
         layout.setSpacing(12)
 
-        # 左侧：置顶按钮（向左移，不占满）
-        self.always_top_btn = QPushButton("置顶")
+        # 左侧：置顶按钮（带 pin SVG 图标）
+        self.always_top_btn = QPushButton(" 置顶")
         self.always_top_btn.setFixedHeight(32)
         self.always_top_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.always_top_btn.setStyleSheet("""
@@ -677,9 +693,10 @@ class MainWindow(QWidget):
                 color: #475569;
                 border: 1px solid #E2E8F0;
                 border-radius: 16px;
-                padding: 0 14px;
+                padding: 0 14px 0 10px;
                 font-size: 12px;
                 font-weight: 500;
+                text-align: left;
             }
             QPushButton:hover {
                 background-color: #F1F5F9;
@@ -687,6 +704,10 @@ class MainWindow(QWidget):
                 border: 1px solid #CBD5E1;
             }
         """)
+        pin_pix = render_icon("pin", size=16, color="#475569")
+        if pin_pix and not pin_pix.isNull():
+            self.always_top_btn.setIcon(QIcon(pin_pix))
+            self.always_top_btn.setIconSize(QSize(16, 16))
         self.always_top_btn.clicked.connect(self._toggle_always_on_top)
         layout.addWidget(self.always_top_btn)
 
@@ -696,8 +717,35 @@ class MainWindow(QWidget):
         layout.addWidget(self.header_title)
         layout.addStretch()
 
+        # 右侧：重启更新按钮（有已下载的更新包时显示）
+        self.restart_update_btn = QPushButton(" 重启更新")
+        self.restart_update_btn.setFixedHeight(32)
+        self.restart_update_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.restart_update_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {PRIMARY};
+                color: #FFFFFF;
+                border: none;
+                border-radius: 16px;
+                padding: 0 14px 0 10px;
+                font-size: 12px;
+                font-weight: 600;
+                text-align: left;
+            }}
+            QPushButton:hover {{
+                background-color: {PRIMARY_DARK};
+            }}
+        """)
+        restart_pix = render_icon("rotate-cw", size=16, color="#FFFFFF")
+        if restart_pix and not restart_pix.isNull():
+            self.restart_update_btn.setIcon(QIcon(restart_pix))
+            self.restart_update_btn.setIconSize(QSize(16, 16))
+        self.restart_update_btn.clicked.connect(self._restart_to_update)
+        self.restart_update_btn.hide()
+        layout.addWidget(self.restart_update_btn)
+
         # 右侧：设置按钮
-        self.settings_btn = QPushButton("设置")
+        self.settings_btn = QPushButton(" 设置")
         self.settings_btn.setFixedHeight(32)
         self.settings_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.settings_btn.setStyleSheet("""
@@ -706,9 +754,10 @@ class MainWindow(QWidget):
                 color: #475569;
                 border: 1px solid #E2E8F0;
                 border-radius: 16px;
-                padding: 0 14px;
+                padding: 0 14px 0 10px;
                 font-size: 12px;
                 font-weight: 500;
+                text-align: left;
             }
             QPushButton:hover {
                 background-color: #F1F5F9;
@@ -716,14 +765,38 @@ class MainWindow(QWidget):
                 border: 1px solid #CBD5E1;
             }
         """)
+        settings_pix = render_icon("settings", size=16, color="#475569")
+        if settings_pix and not settings_pix.isNull():
+            self.settings_btn.setIcon(QIcon(settings_pix))
+            self.settings_btn.setIconSize(QSize(16, 16))
         self.settings_btn.clicked.connect(self._show_settings_dialog)
         layout.addWidget(self.settings_btn)
 
         # 右侧：关于按钮
-        self.about_btn = QPushButton("关于")
+        self.about_btn = QPushButton(" 关于")
         self.about_btn.setFixedHeight(32)
         self.about_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.about_btn.setStyleSheet(self.settings_btn.styleSheet())
+        self.about_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #FFFFFF;
+                color: #475569;
+                border: 1px solid #E2E8F0;
+                border-radius: 16px;
+                padding: 0 14px 0 10px;
+                font-size: 12px;
+                font-weight: 500;
+                text-align: left;
+            }
+            QPushButton:hover {
+                background-color: #F1F5F9;
+                color: #1E293B;
+                border: 1px solid #CBD5E1;
+            }
+        """)
+        info_pix = render_icon("info", size=16, color="#475569")
+        if info_pix and not info_pix.isNull():
+            self.about_btn.setIcon(QIcon(info_pix))
+            self.about_btn.setIconSize(QSize(16, 16))
         self.about_btn.clicked.connect(self._show_about_page)
         layout.addWidget(self.about_btn)
 
@@ -731,7 +804,7 @@ class MainWindow(QWidget):
 
     def _make_icon_badge(self, letter: str, color: str = PRIMARY,
                          bg_color: str = PRIMARY_ULTRALIGHT, size: int = 32) -> QLabel:
-        """构造一个圆角英文首字母色块图标。"""
+        """构造一个圆角英文首字母色块图标（兜底）。"""
         lbl = QLabel(letter)
         lbl.setFixedSize(size, size)
         lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -744,6 +817,28 @@ class MainWindow(QWidget):
             font-family: "SF Pro Display", "PingFang SC", "Microsoft YaHei", sans-serif;
         """)
         return lbl
+
+    def _make_app_icon_label(self, size: int = 28) -> QLabel:
+        """构造标题栏应用图标：优先使用 assets/app_icon.ico，缺失时回退 Lucide bell。"""
+        icon_path = _resolve_asset("assets/app_icon.ico")
+        if icon_path and os.path.exists(icon_path):
+            pix = QPixmap(icon_path)
+            if not pix.isNull():
+                lbl = QLabel()
+                lbl.setFixedSize(size, size)
+                lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                lbl.setStyleSheet("background: transparent;")
+                lbl.setPixmap(
+                    pix.scaled(
+                        size, size,
+                        Qt.AspectRatioMode.KeepAspectRatio,
+                        Qt.TransformationMode.SmoothTransformation,
+                    )
+                )
+                return lbl
+
+        # 回退：Lucide bell SVG
+        return icon_label("bell", size=size, color=PRIMARY, bg_color=None, radius=0, parent=self)
 
     def _make_row_icon(self, rel_path: str, fallback_letter: str) -> QWidget:
         """构造一个设置行左侧的图标块：
@@ -816,8 +911,8 @@ class MainWindow(QWidget):
                 chosen_brand = None
 
         if not chosen_brand:
-            # 兜底：品牌英文首字母
-            logo_icon = self._make_icon_badge("W", size=56)
+            # 兜底：应用图标 + 标题
+            logo_icon = self._make_app_icon_label(size=56)
             logo_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
             logo_title = QLabel("闻铎点名器")
@@ -846,10 +941,10 @@ class MainWindow(QWidget):
         self.nav_group = QButtonGroup(self)
         self.nav_group.setExclusive(True)
 
-        self.nav_settings = SidebarButton("H", "主页")
+        self.nav_settings = SidebarButton("home", "主页")
         self.nav_settings.setChecked(True)
-        self.nav_names = SidebarButton("N", "名单")
-        self.nav_history = SidebarButton("R", "历史")
+        self.nav_names = SidebarButton("users", "名单")
+        self.nav_history = SidebarButton("history", "历史")
 
         self.nav_group.addButton(self.nav_settings, 0)
         self.nav_group.addButton(self.nav_names, 1)
@@ -905,14 +1000,12 @@ class MainWindow(QWidget):
                     )
                 )
             else:
-                deco.setText("●")
-                deco.setStyleSheet("font-size: 40px; color: #3B82F6; background: transparent;")
+                deco = icon_label("sparkles", size=56, color=PRIMARY_LIGHT, bg_color=None, radius=0, parent=bottom_widget)
         else:
-            deco.setText("●")
-            deco.setStyleSheet("font-size: 40px; color: #3B82F6; background: transparent;")
+            deco = icon_label("sparkles", size=56, color=PRIMARY_LIGHT, bg_color=None, radius=0, parent=bottom_widget)
         bottom_layout.addWidget(deco)
 
-        version = QLabel(f"v3.0.1")
+        version = QLabel(CURRENT_VERSION)
         version.setAlignment(Qt.AlignmentFlag.AlignCenter)
         version.setStyleSheet(f"color: {TEXT_TERTIARY}; font-size: 11px; background: transparent; font-weight: 500;")
         bottom_layout.addWidget(version)
@@ -977,15 +1070,15 @@ class MainWindow(QWidget):
         btn_row = QHBoxLayout()
         btn_row.setSpacing(12)
 
-        self.start_btn = ActionButton("", "开始点名", PRIMARY)
+        self.start_btn = ActionButton("play", "开始点名", PRIMARY)
         self.start_btn.setFixedHeight(44)
         self.start_btn.clicked.connect(self._toggle_rolling)
 
-        self.batch_btn = ActionButton("", "批量抽取", ACCENT)
+        self.batch_btn = ActionButton("users", "批量抽取", ACCENT)
         self.batch_btn.setFixedHeight(44)
         self.batch_btn.clicked.connect(self._do_batch_pick)
 
-        self.group_btn = ActionButton("", "抽组", SECONDARY)
+        self.group_btn = ActionButton("group", "抽组", SECONDARY)
         self.group_btn.setFixedHeight(44)
         self.group_btn.clicked.connect(self._show_group_page)
 
@@ -1030,7 +1123,7 @@ class MainWindow(QWidget):
         speed_layout.setContentsMargins(0, 0, 0, 0)
         speed_layout.setSpacing(12)
 
-        speed_icon = self._make_icon_badge("S")
+        speed_icon = icon_label("gauge", size=28, color=PRIMARY, bg_color="#EFF6FF", radius=8, parent=speed_widget)
         speed_layout.addWidget(speed_icon)
 
         speed_label = QLabel("点名速度")
@@ -1076,7 +1169,7 @@ class MainWindow(QWidget):
         stop_layout.setContentsMargins(0, 0, 0, 0)
         stop_layout.setSpacing(12)
 
-        stop_icon = self._make_row_icon("assets/icons/stop_time.png", "T")
+        stop_icon = icon_label("timer", size=28, color=PRIMARY, bg_color="#EFF6FF", radius=8, parent=stop_widget)
         stop_layout.addWidget(stop_icon)
 
         stop_label = QLabel("停止时间")
@@ -1122,7 +1215,7 @@ class MainWindow(QWidget):
         batch_layout.setContentsMargins(0, 0, 0, 0)
         batch_layout.setSpacing(12)
 
-        batch_icon = self._make_icon_badge("B")
+        batch_icon = icon_label("users", size=28, color=PRIMARY, bg_color="#EFF6FF", radius=8, parent=batch_widget)
         batch_layout.addWidget(batch_icon)
 
         batch_label = QLabel("批量人数")
@@ -1196,7 +1289,7 @@ class MainWindow(QWidget):
         anim_layout.setContentsMargins(0, 0, 0, 0)
         anim_layout.setSpacing(12)
 
-        anim_icon = self._make_icon_badge("A")
+        anim_icon = icon_label("sparkles", size=28, color=PRIMARY, bg_color="#EFF6FF", radius=8, parent=anim_widget)
         anim_layout.addWidget(anim_icon)
 
         anim_label = QLabel("丝滑动画")
@@ -1544,7 +1637,7 @@ class MainWindow(QWidget):
         range_layout.setContentsMargins(0, 0, 0, 0)
         range_layout.setSpacing(12)
 
-        range_icon = self._make_icon_badge("G", color=SECONDARY, bg_color="#ECFDF5", size=28)
+        range_icon = icon_label("group", size=28, color=SECONDARY, bg_color="#ECFDF5", radius=8, parent=range_widget)
         range_layout.addWidget(range_icon)
 
         range_label = QLabel("抽组范围")
@@ -1703,6 +1796,24 @@ class MainWindow(QWidget):
         self.stack.setCurrentIndex(index)
         titles = ["主页", "名单", "历史", "抽组"]
         self.header_title.setText(titles[index])
+
+    def moveEvent(self, event):
+        """主窗口移动时，设置页跟随同步位置。"""
+        super().moveEvent(event)
+        self._sync_settings_dialog_geometry()
+
+    def resizeEvent(self, event):
+        """主窗口尺寸变化时，设置页跟随同步尺寸。"""
+        super().resizeEvent(event)
+        self._sync_settings_dialog_geometry()
+
+    def _sync_settings_dialog_geometry(self):
+        """同步设置对话框与主窗口的位置和尺寸。"""
+        dlg = getattr(self, "_settings_dialog", None)
+        if dlg and dlg.isVisible():
+            geo = self.geometry()
+            dlg.setFixedSize(geo.width(), geo.height())
+            dlg.move(geo.x(), geo.y())
 
     def _show_group_page(self):
         """显示抽组专用页面"""
@@ -2234,7 +2345,8 @@ class MainWindow(QWidget):
                 self.always_top_btn.setText("已置顶")
 
     def _show_settings_dialog(self):
-        """打开与主界面同尺寸的全屏设置页：动画开关 + 自动更新 + 版本信息 + 检查更新"""
+        """打开与主界面同尺寸的全屏设置页：动画开关 + 自动更新 + 版本信息 + 检查更新。
+        设置页无标题栏、不可移动、与主窗口位置/尺寸实时同步，视觉上融为一体。"""
         if hasattr(self, "_settings_dialog") and self._settings_dialog and self._settings_dialog.isVisible():
             self._settings_dialog.raise_()
             self._settings_dialog.activateWindow()
@@ -2243,11 +2355,45 @@ class MainWindow(QWidget):
         from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QScrollArea
         from PyQt6.QtCore import Qt as _Qt
 
-        dlg = QDialog(self)
+        class BundledSettingsDialog(QDialog):
+            """与主窗口捆绑的设置页：无标题栏、禁止拖动、跟随主窗口移动/缩放。"""
+
+            def __init__(self, parent):
+                super().__init__(parent)
+                self._parent = parent
+                self._dragging = False
+                self.setWindowFlags(
+                    _Qt.WindowType.Dialog |
+                    _Qt.WindowType.FramelessWindowHint
+                )
+                self.setStyleSheet(f"background-color: {BG_MAIN};")
+                self._sync_geometry()
+
+            def _sync_geometry(self):
+                """尺寸与位置与主窗口完全一致。"""
+                geo = self._parent.geometry()
+                self.setFixedSize(geo.width(), geo.height())
+                self.move(geo.x(), geo.y())
+
+            def moveEvent(self, event):
+                """禁止外部/用户移动；始终跟随主窗口。"""
+                if self._parent and not self._dragging:
+                    expected = self._parent.geometry().topLeft()
+                    if self.pos() != expected:
+                        self.move(expected)
+                super().moveEvent(event)
+
+            def mousePressEvent(self, event):
+                """不允许通过鼠标拖动本窗口。"""
+                event.accept()
+
+            def mouseMoveEvent(self, event):
+                """不允许通过鼠标拖动本窗口。"""
+                event.accept()
+
+        # 设置页与主界面同尺寸、无标题栏、不可拖动
+        dlg = BundledSettingsDialog(self)
         dlg.setWindowTitle("设置 · 闻铎点名器")
-        dlg.setFixedSize(self.WINDOW_WIDTH, self.WINDOW_HEIGHT)
-        dlg.move(self.pos())
-        dlg.setStyleSheet(f"background-color: {BG_MAIN};")
 
         outer = QVBoxLayout(dlg)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -2261,21 +2407,28 @@ class MainWindow(QWidget):
         nav_lay.setContentsMargins(24, 0, 24, 0)
         nav_lay.setSpacing(16)
 
-        back_btn = QPushButton("← 返回")
+        back_btn = QPushButton(" 返回")
         back_btn.setFixedHeight(32)
         back_btn.setCursor(_Qt.CursorShape.PointingHandCursor)
+        back_btn.setLayoutDirection(_Qt.LayoutDirection.LeftToRight)
         back_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: {PRIMARY_ULTRALIGHT};
                 color: {PRIMARY};
                 border: none;
                 border-radius: 16px;
-                padding: 0 14px;
+                padding: 0 14px 0 10px;
                 font-size: 13px;
                 font-weight: 600;
+                text-align: left;
             }}
             QPushButton:hover {{ background-color: #CCE4FF; }}
         """)
+        # 左侧 Lucide 返回箭头图标
+        back_pix = render_icon("arrow-left", size=18, color=PRIMARY)
+        if back_pix and not back_pix.isNull():
+            back_btn.setIcon(QIcon(back_pix))
+            back_btn.setIconSize(QSize(18, 18))
         back_btn.clicked.connect(dlg.accept)
         nav_lay.addWidget(back_btn)
 
@@ -2315,7 +2468,7 @@ class MainWindow(QWidget):
         ar_lay.setContentsMargins(20, 16, 20, 16)
         ar_lay.setSpacing(16)
 
-        anim_icon = self._make_icon_badge("A")
+        anim_icon = icon_label("sparkles", size=28, color=PRIMARY, bg_color="#EFF6FF", radius=8, parent=anim_row)
         ar_lay.addWidget(anim_icon)
 
         anim_text = QVBoxLayout()
@@ -2355,7 +2508,7 @@ class MainWindow(QWidget):
         ur_lay.setContentsMargins(20, 16, 20, 16)
         ur_lay.setSpacing(16)
 
-        up_icon = self._make_icon_badge("U", color=WARNING, bg_color="#FFF3E0")
+        up_icon = icon_label("rotate-cw", size=28, color=WARNING, bg_color="#FFF3E0", radius=8, parent=update_row)
         ur_lay.addWidget(up_icon)
 
         up_text = QVBoxLayout()
@@ -2387,7 +2540,7 @@ class MainWindow(QWidget):
 
         ver_header = QHBoxLayout()
         ver_header.setSpacing(16)
-        ver_icon = self._make_icon_badge("V")
+        ver_icon = icon_label("info", size=28, color=PRIMARY, bg_color="#EFF6FF", radius=8, parent=ver_card)
         ver_header.addWidget(ver_icon)
         ver_title = QVBoxLayout()
         ver_title.setSpacing(2)
@@ -2572,23 +2725,86 @@ class MainWindow(QWidget):
         self.display_card.set_sub_message(default)
 
     def _silent_check_update(self):
-        """启动时静默检查更新，有新版本才提示"""
+        """启动时静默检查更新；若发现新版本则在后台自动下载。"""
         self._silent_check_thread = CheckUpdateThread()
         self._silent_check_thread.finished.connect(self._on_silent_check_finished)
         self._silent_check_thread.start()
 
     def _on_silent_check_finished(self, info, error_msg):
-        """静默检查完成回调"""
+        """静默检查完成回调：有新版本时自动开始后台下载，无提示打扰。"""
         if error_msg or info is None:
-            return  # 静默失败或无新版本，不打扰用户
+            return
+        self._start_silent_download(info)
 
-        # 有新版本，显示友好提示
+    def _check_pending_update_on_startup(self):
+        """启动时检查是否已有下载好的更新包，若有则提示重启。"""
+        state = load_update_state()
+        path = state.get("path", "")
+        version = state.get("version", "")
+        status = state.get("status", "")
+
+        if status == "ready" and path and os.path.exists(path) and version:
+            # 若版本不比当前新，则清理旧状态
+            if not is_newer_version(version, CURRENT_VERSION):
+                clear_update_state()
+                return
+            self._show_update_ready_prompt(version, path)
+
+    def _start_silent_download(self, info: UpdateInfo):
+        """后台静默下载更新包，不显示模态下载窗口。"""
+        os.makedirs(get_save_dir(), exist_ok=True)
+        save_path = os.path.join(get_save_dir(), info.filename)
+
+        # 记录正在下载的状态
+        save_update_state({
+            "version": info.tag_name,
+            "path": save_path,
+            "status": "downloading",
+        })
+
+        self._show_toast(f"发现新版本 {info.tag_name}，正在后台下载...", auto_reset_ms=4000)
+
+        if info.parts_urls:
+            self._silent_download_thread = DownloadPartsThread(info.parts_urls, save_path)
+        else:
+            self._silent_download_thread = DownloadThread(info.download_urls, save_path)
+        self._silent_download_thread.finished.connect(self._on_silent_download_finished)
+        self._silent_download_thread.failed.connect(self._on_silent_download_failed)
+        self._silent_download_thread.start()
+
+    def _on_silent_download_finished(self, path: str, url: str):
+        """后台下载完成：保存状态并弹出重启提示。"""
+        state = load_update_state()
+        version = state.get("version", "")
+        save_update_state({
+            "version": version,
+            "path": path,
+            "status": "ready",
+        })
+        self._show_update_ready_prompt(version, path)
+
+    def _on_silent_download_failed(self, error_msg: str):
+        """后台下载失败：清空状态并给出轻量提示。"""
+        clear_update_state()
+        self._show_toast(f"更新下载失败，将下次启动时重试")
+
+    def _show_update_ready_prompt(self, version: str, path: str):
+        """显示‘新版本已下载，重启即可更新’提示框，并提供重启按钮。"""
+        if getattr(self, "_update_ready_dialog", None) and self._update_ready_dialog.isVisible():
+            self._update_ready_dialog.raise_()
+            self._update_ready_dialog.activateWindow()
+            return
+
+        # 顶部工具栏显示常驻重启按钮
+        if getattr(self, "restart_update_btn", None):
+            self.restart_update_btn.show()
+
         from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton
         from PyQt6.QtCore import Qt as _Qt
 
         dlg = QDialog(self)
-        dlg.setWindowTitle("发现新版本")
-        dlg.setFixedSize(400, 280)
+        dlg.setWindowTitle("新版本已就绪")
+        dlg.setFixedSize(420, 240)
         dlg.setStyleSheet(f"background-color: {BG_MAIN};")
 
         lay = QVBoxLayout(dlg)
@@ -2600,7 +2816,7 @@ class MainWindow(QWidget):
         nav.setStyleSheet(f"background-color: {WHITE}; border-bottom: 1px solid {NEUTRAL_5};")
         nv = QHBoxLayout(nav)
         nv.setContentsMargins(20, 0, 20, 0)
-        t = QLabel("发现新版本")
+        t = QLabel("新版本已就绪")
         t.setStyleSheet(f"font-size: 17px; font-weight: 600; color: {TEXT_PRIMARY}; background: transparent;")
         nv.addWidget(t)
         lay.addWidget(nav)
@@ -2611,26 +2827,20 @@ class MainWindow(QWidget):
         cl.setContentsMargins(24, 20, 24, 20)
         cl.setSpacing(12)
 
-        ver = QLabel(f"新版本：{info.tag_name}")
-        ver.setStyleSheet(f"font-size: 20px; font-weight: 700; color: {PRIMARY_DARK}; background: transparent;")
+        ver = QLabel(f"新版本 {version} 已下载完成")
+        ver.setStyleSheet(f"font-size: 18px; font-weight: 700; color: {PRIMARY_DARK}; background: transparent;")
         cl.addWidget(ver)
 
-        cur = QLabel(f"当前版本：{CURRENT_VERSION}")
+        cur = QLabel(f"当前版本：{CURRENT_VERSION}，重启后即可完成更新")
+        cur.setWordWrap(True)
         cur.setStyleSheet(f"font-size: 13px; color: {TEXT_SECONDARY}; background: transparent;")
         cl.addWidget(cur)
-
-        if info.body:
-            # 截取前200字符作为更新说明预览
-            body_preview = info.body[:200] + ("..." if len(info.body) > 200 else "")
-            notes = QLabel(f"更新内容：\n{body_preview}")
-            notes.setWordWrap(True)
-            notes.setStyleSheet(f"font-size: 12px; color: {TEXT_SECONDARY}; background: transparent; line-height: 1.5; padding: 8px; background-color: {WHITE}; border-radius: 8px;")
-            cl.addWidget(notes)
 
         cl.addStretch()
 
         btn_row = QHBoxLayout()
         btn_row.setSpacing(10)
+
         later_btn = QPushButton("稍后")
         later_btn.setFixedHeight(36)
         later_btn.setCursor(_Qt.CursorShape.PointingHandCursor)
@@ -2648,10 +2858,10 @@ class MainWindow(QWidget):
         """)
         later_btn.clicked.connect(dlg.reject)
 
-        update_btn = QPushButton("立即更新")
-        update_btn.setFixedHeight(36)
-        update_btn.setCursor(_Qt.CursorShape.PointingHandCursor)
-        update_btn.setStyleSheet(f"""
+        restart_btn = QPushButton("立即重启")
+        restart_btn.setFixedHeight(36)
+        restart_btn.setCursor(_Qt.CursorShape.PointingHandCursor)
+        restart_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: {PRIMARY};
                 color: white;
@@ -2663,18 +2873,47 @@ class MainWindow(QWidget):
             }}
             QPushButton:hover {{ background-color: {PRIMARY_DARK}; }}
         """)
-        def _do_update():
+        def _do_restart():
             dlg.accept()
-            self._start_download(info)
-        update_btn.clicked.connect(_do_update)
+            self._restart_to_update()
+        restart_btn.clicked.connect(_do_restart)
 
         btn_row.addStretch()
         btn_row.addWidget(later_btn)
-        btn_row.addWidget(update_btn)
+        btn_row.addWidget(restart_btn)
         cl.addLayout(btn_row)
 
         lay.addWidget(content, 1)
+        self._update_ready_dialog = dlg
         dlg.exec()
+
+    def _restart_to_update(self):
+        """重启以应用已下载的更新：启动安装程序并退出当前程序。"""
+        state = load_update_state()
+        path = state.get("path", "")
+        if not path or not os.path.exists(path):
+            self._show_toast("更新包已丢失，将重新检查更新")
+            clear_update_state()
+            if getattr(self, "restart_update_btn", None):
+                self.restart_update_btn.hide()
+            return
+
+        install_dir = get_existing_install_dir()
+        if not install_dir:
+            self._show_toast("未找到安装目录，请手动运行安装包")
+            return
+
+        try:
+            # 使用 /SILENT /DIR /WAITPID /LAUNCH 让安装程序静默覆盖并重启
+            launch_installer(path, install_dir=install_dir, silent=True,
+                             wait_pid=os.getpid(), launch=True)
+            QApplication.quit()
+        except Exception as e:
+            QMessageBox.warning(
+                self,
+                "重启更新失败",
+                f"无法启动安装程序：{e}\n\n请手动运行：\n{path}"
+            )
 
     def _check_for_updates(self, button=None):
         """检查更新"""
@@ -2827,17 +3066,27 @@ class MainWindow(QWidget):
         if hasattr(self, "_download_dialog"):
             self._download_dialog.accept()
 
+        install_dir = get_existing_install_dir()
+        if not install_dir:
+            QMessageBox.information(
+                self,
+                "下载完成",
+                f"更新包已下载完成！\n\n文件位置：{path}\n\n未检测到安装目录，请手动运行安装包。"
+            )
+            return
+
         reply = QMessageBox.question(
             self,
             "下载完成",
-            f"更新包已下载完成！\n\n文件位置：{path}\n\n是否立即开始安装？\n（安装过程会自动关闭当前程序）",
+            f"更新包已下载完成！\n\n将安装到：{install_dir}\n\n是否立即安装并重启？\n（安装过程会自动关闭当前程序）",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.Yes
         )
 
         if reply == QMessageBox.StandardButton.Yes:
             try:
-                launch_installer(path)
+                launch_installer(path, install_dir=install_dir, silent=True,
+                                 wait_pid=os.getpid(), launch=True)
                 QApplication.quit()
             except Exception as e:
                 QMessageBox.warning(
@@ -2870,6 +3119,10 @@ class MainWindow(QWidget):
         if hasattr(self, "_download_thread") and self._download_thread.isRunning():
             self._download_thread.cancel()
             self._download_thread.wait(2000)
+
+        if hasattr(self, "_silent_download_thread") and self._silent_download_thread.isRunning():
+            self._silent_download_thread.cancel()
+            self._silent_download_thread.wait(2000)
 
         self.hide()
         event.ignore()

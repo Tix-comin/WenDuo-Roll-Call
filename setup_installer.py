@@ -37,9 +37,9 @@ else:
 APP_NAME = "闻铎点名器"
 APP_EXE = "闻铎点名器.exe"
 UNINSTALL_EXE = "uninstall.exe"
-APP_VERSION = "2.0.0"
+APP_VERSION = "3.0.2"
 APP_PUBLISHER = "Tix comin"
-CONTACT_EMAIL = "dwlxjztz@qq.com"
+CONTACT_EMAIL = "dwlxjjtz@qq.com"
 
 
 # ---- 资源路径 ----
@@ -139,6 +139,64 @@ def write_uninstall_registry(install_dir, exe_size):
     except Exception as e:
         print(f"[WARN] registry write failed: {e}")
         return False
+
+
+# ---- 命令行参数解析（支持静默安装 / 自动更新） ----
+def _parse_installer_args(argv):
+    """解析安装程序命令行参数。"""
+    args = {"silent": False, "dir": None, "wait_pid": None, "launch": False}
+    for i, arg in enumerate(argv):
+        upper = arg.upper()
+        if upper == "/SILENT" or upper == "/S":
+            args["silent"] = True
+        elif upper.startswith("/DIR="):
+            args["dir"] = arg.split("=", 1)[1].strip('"')
+        elif upper.startswith("/WAITPID="):
+            try:
+                args["wait_pid"] = int(arg.split("=", 1)[1])
+            except ValueError:
+                pass
+        elif upper == "/LAUNCH":
+            args["launch"] = True
+    return args
+
+
+def _wait_for_pid(pid: int, timeout: float = 60.0):
+    """等待指定进程退出（通过轮询 os.kill(pid, 0)）。"""
+    import time
+    start = time.time()
+    while True:
+        try:
+            os.kill(pid, 0)
+        except OSError:
+            # 进程已不存在
+            break
+        if time.time() - start > timeout:
+            break
+        time.sleep(0.3)
+
+
+def _safe_extract_member(zf, name, out_path):
+    """安全解压单个文件：若目标文件被占用（如正在运行的 exe），先重命名旧文件。"""
+    out_dir = os.path.dirname(out_path)
+    if out_dir:
+        os.makedirs(out_dir, exist_ok=True)
+    try:
+        with zf.open(name) as src, open(out_path, "wb") as dst:
+            shutil.copyfileobj(src, dst)
+        return
+    except PermissionError:
+        # 尝试重命名旧文件后再写入（适用于更新时主程序正在运行的情况）
+        if os.path.exists(out_path):
+            old_path = out_path + ".old"
+            try:
+                if os.path.exists(old_path):
+                    os.remove(old_path)
+                os.rename(out_path, old_path)
+            except Exception:
+                raise
+        with zf.open(name) as src, open(out_path, "wb") as dst:
+            shutil.copyfileobj(src, dst)
 
 
 # ---- 安装业务逻辑 ----
@@ -391,7 +449,7 @@ class InstallerWindow(QWidget):
 
         # 推荐路径提示 + 快捷按钮
         tip_row = QHBoxLayout()
-        self.dir_tip = QLabel("💡 推荐使用默认路径（无需管理员权限，任何电脑都可安装）")
+        self.dir_tip = QLabel("推荐使用默认路径（无需管理员权限，任何电脑都可安装）")
         self.dir_tip.setStyleSheet(
             "color: #64748b; font-size: 11px; background: #f8fafc;"
             "padding: 6px 10px; border-radius: 4px;"
@@ -498,7 +556,7 @@ class InstallerWindow(QWidget):
     def _use_recommended(self):
         self.dir_input.setText(self._recommended_path())
         if hasattr(self, "dir_tip"):
-            self.dir_tip.setText("✅ 已切换到推荐路径（无需管理员权限）")
+            self.dir_tip.setText("已切换到推荐路径（无需管理员权限）")
 
     def _test_writable(self, path):
         """测试路径是否可写，返回 (ok, 说明)。"""
@@ -609,10 +667,68 @@ class InstallerWindow(QWidget):
 # ============================================================
 #                        入口
 # ============================================================
+def _run_silent_install(args):
+    """静默安装模式：不显示 GUI，直接覆盖安装到指定目录。"""
+    install_dir = args.get("dir")
+    if not install_dir:
+        # 优先使用注册表中的现有安装目录
+        try:
+            key = winreg.OpenKey(
+                winreg.HKEY_CURRENT_USER,
+                rf"Software\Microsoft\Windows\CurrentVersion\Uninstall\{APP_NAME}",
+            )
+            value, _ = winreg.QueryValueEx(key, "InstallLocation")
+            winreg.CloseKey(key)
+            if value and os.path.isdir(value):
+                install_dir = value
+        except Exception:
+            pass
+    if not install_dir:
+        install_dir = os.path.join(
+            os.environ.get("LOCALAPPDATA") or os.path.join(os.path.expanduser("~"), "AppData", "Local"),
+            "Programs", APP_NAME,
+        )
+
+    wait_pid = args.get("wait_pid")
+    if wait_pid:
+        _wait_for_pid(wait_pid)
+
+    worker = InstallWorker(
+        install_dir=install_dir,
+        create_desktop=True,
+        create_startmenu=True,
+        enable_animations=True,
+    )
+
+    logs = []
+    try:
+        worker.run(
+            progress_callback=lambda p: None,
+            log_callback=lambda m: logs.append(m),
+        )
+    except Exception as e:
+        print(f"[ERROR] 静默安装失败: {e}")
+        sys.exit(1)
+
+    if args.get("launch"):
+        try:
+            exe_path = os.path.join(install_dir, APP_EXE)
+            if os.path.exists(exe_path):
+                subprocess.Popen([exe_path], cwd=install_dir)
+        except Exception as e:
+            print(f"[WARN] 安装后启动失败: {e}")
+
+
 def main():
     if not HAS_PYQT:
         print("PyQt6 不可用，请在安装 PyQt6 后重新打包")
         sys.exit(1)
+
+    args = _parse_installer_args(sys.argv)
+
+    if args.get("silent"):
+        _run_silent_install(args)
+        sys.exit(0)
 
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
