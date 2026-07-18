@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# PyInstaller
+build/
+dist/
+dist-install/
+*.spec
+payload.zip
+
+# 用户数据
+data/
+
+# 调试/测试文件
+debug_*
+test_*
+icon_preview_256.png
+ui_screenshot.png
+run.log
+
+# 其他无关目录
+导入u盘/
+672+2
